@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "{definitions/**,openapi.yaml}"
+    }
+  },
+  "rewrites": [
+    {
+      "destination": "/api/index",
+      "source": "/(.*)"
+    }
+  ]
+}

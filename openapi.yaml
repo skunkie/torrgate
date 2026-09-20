@@ -1,0 +1,995 @@
+# SPDX-FileCopyrightText: 2026 TorrPlay
+#
+# SPDX-License-Identifier: MIT
+
+openapi: 3.1.0
+info:
+  title: TorrGate API
+  version: 1.0.0
+  description: High-performance TypeScript API gateway and proxy for torrent trackers, adhering to the canonical Jackett REST v2.0 path space.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: /api/v2.0/indexers
+    description: Canonical Jackett REST v2.0 endpoint space
+security:
+  - ApiKeyAuth: []
+  - ApiKeyQuery: []
+  - BearerAuth: []
+  - {}
+paths:
+  /:
+    get:
+      summary: List registered indexers
+      description: Returns all supported torrent trackers.
+      operationId: listIndexers
+      responses:
+        "200":
+          description: List of registered indexer metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JackettIndexer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /check:
+    get:
+      summary: Check indexer availability
+      description: Tests connectivity across all registered indexers and returns their online status.
+      operationId: checkIndexers
+      responses:
+        "200":
+          description: Indexer availability status map
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderStatusMap"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /status:
+    get:
+      summary: Get indexer status
+      description: Alias for /check returning indexer availability status.
+      operationId: getIndexersStatus
+      responses:
+        "200":
+          description: Indexer availability status map
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderStatusMap"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /{indexer}/categories:
+    get:
+      summary: Get indexer category mappings
+      description: Returns the list of categories and their numeric IDs for a specific indexer.
+      operationId: getCategories
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier
+          schema:
+            type: string
+            example: "rutor"
+      responses:
+        "200":
+          description: List of category mappings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryMapping"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /{indexer}/details/{id}:
+    get:
+      summary: Get topic details by ID
+      description: Retrieves detailed metadata for a specific topic/release by its tracker ID.
+      operationId: getTopicDetails
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier
+          schema:
+            type: string
+            example: "rutracker-ru"
+        - name: id
+          in: path
+          required: true
+          description: Topic or torrent ID
+          schema:
+            type: string
+            example: "100001"
+      responses:
+        "200":
+          description: Topic details
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TopicDetails"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /{indexer}/download:
+    get:
+      summary: Download .torrent file
+      description: Proxies and streams .torrent file downloads from trackers requiring cookies or proxy access.
+      operationId: downloadTorrent
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier
+          schema:
+            type: string
+            example: "rutracker-ru"
+        - name: url
+          in: query
+          required: true
+          description: Relative or absolute download URL for the .torrent file
+          schema:
+            type: string
+            example: "https://rutracker.org/forum/dl.php?t=100001"
+      responses:
+        "200":
+          description: Torrent file binary content
+          content:
+            application/x-bittorrent:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /{indexer}/magnet:
+    get:
+      summary: Extract magnet URI from .torrent file
+      description: Downloads the .torrent file through the indexer and builds a magnet URI from it, with the info hash computed from the file's info dictionary, the release name as the display name, and the file's announce URLs as trackers.
+      operationId: getMagnetUri
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier
+          schema:
+            type: string
+            example: "rutracker-ru"
+        - name: url
+          in: query
+          required: true
+          description: Relative or absolute download URL for the .torrent file
+          schema:
+            type: string
+            example: "https://rutracker.org/forum/dl.php?t=100001"
+      responses:
+        "200":
+          description: Magnet URI and info hash of the .torrent file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /{indexer}/results:
+    get:
+      summary: Search torrents across indexers
+      description: Searches for releases on a specific indexer or across all indexers, returning the search results envelope.
+      operationId: searchResults
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name, identifier, or 'all'
+          schema:
+            type: string
+            example: "all"
+        - name: Query
+          in: query
+          required: false
+          description: Search keywords
+          schema:
+            type: string
+            example: "Example Release"
+        - name: Category
+          in: query
+          required: false
+          description: Torznab category IDs, comma-separated (standard IDs, or 100000 + tracker category ID)
+          schema:
+            type: string
+        - name: Category[]
+          in: query
+          required: false
+          description: Category ID array filter (Jackett / Torznab wire format)
+          schema:
+            type: array
+            items:
+              type: integer
+        - name: Tracker[]
+          in: query
+          required: false
+          description: Target tracker filter list when indexer is 'all'
+          schema:
+            type: array
+            items:
+              type: string
+            example: ["rutor", "kinozal"]
+        - name: Year
+          in: query
+          required: false
+          description: Release year filter (Kinozal only)
+          schema:
+            type: integer
+            example: 2026
+        - name: format
+          in: query
+          required: false
+          description: Video resolution format (720, 1080, 2160)
+          schema:
+            type: integer
+            enum: [720, 1080, 2160]
+        - name: Page
+          in: query
+          required: false
+          description: Native tracker page number (0-indexed); when limit or offset is present, it determines the result-window offset unless offset is explicit
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: offset
+          in: query
+          required: false
+          description: Number of results to skip across tracker pages
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return; 0 uses the default
+          schema:
+            type: integer
+            default: 100
+            minimum: 0
+      responses:
+        "200":
+          description: Jackett search response envelope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JackettSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /{indexer}/results/torznab:
+    get:
+      summary: Get Torznab XML feed or capabilities (alias)
+      description: Alias for /{indexer}/results/torznab/api emitting Torznab XML (<caps> when t=caps, and RSS 2.0 with torznab:attr for search queries).
+      operationId: getTorznabFeedAlias
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier, or `all` for a feed merging every indexer
+          schema:
+            type: string
+            example: "rutor"
+        - name: t
+          in: query
+          required: false
+          description: Torznab request type (caps, search, tvsearch, movie)
+          schema:
+            type: string
+            default: "search"
+            enum: [caps, movie, search, tv-search, tvsearch]
+        - name: q
+          in: query
+          required: false
+          description: Search keywords
+          schema:
+            type: string
+        - name: cat
+          in: query
+          required: false
+          description: Torznab category IDs, comma-separated. A parent (5000) matches its subcategories; 100000 + ID selects one tracker category.
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: Number of results to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return; 0 uses the default
+          schema:
+            type: integer
+            default: 100
+            minimum: 0
+      responses:
+        "200":
+          description: Torznab XML feed or capabilities document
+          content:
+            application/xml:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /{indexer}/results/torznab/api:
+    get:
+      summary: Get Torznab XML feed or capabilities
+      description: Emits Torznab XML (<caps> when t=caps, and RSS 2.0 with torznab:attr for search queries).
+      operationId: getTorznabFeed
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier, or `all` for a feed merging every indexer
+          schema:
+            type: string
+            example: "rutor"
+        - name: t
+          in: query
+          required: false
+          description: Torznab request type (caps, search, tvsearch, movie)
+          schema:
+            type: string
+            default: "search"
+            enum: [caps, movie, search, tv-search, tvsearch]
+        - name: q
+          in: query
+          required: false
+          description: Search keywords
+          schema:
+            type: string
+        - name: cat
+          in: query
+          required: false
+          description: Torznab category IDs, comma-separated. A parent (5000) matches its subcategories; 100000 + ID selects one tracker category.
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: Number of results to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return; 0 uses the default
+          schema:
+            type: integer
+            default: 100
+            minimum: 0
+      responses:
+        "200":
+          description: Torznab XML feed or capabilities document
+          content:
+            application/xml:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+components:
+  responses:
+    BadGateway:
+      description: Bad gateway error when upstream tracker fails
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Target download host is not an allowed mirror of the indexer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalServerError:
+      description: Unexpected internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    TooManyRequests:
+      description: Too many failed API key attempts from this client; retry after the one-minute window
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    AggregatedSearchResult:
+      type: object
+      description: Aggregated search results keyed by provider name
+      additionalProperties:
+        type: array
+        items:
+          $ref: "#/components/schemas/TorrentItem"
+
+    CategoryMapping:
+      type: object
+      description: Mapping between category ID and its display name
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Movies"
+
+    ErrorResponse:
+      type: object
+      description: Standard API error structure
+      required:
+        - error
+        - message
+        - statusCode
+        - success
+      properties:
+        error:
+          type: string
+          example: "NotFound"
+        message:
+          type: string
+          example: "Indexer 'unknown' not found"
+        statusCode:
+          type: integer
+          example: 404
+        success:
+          type: boolean
+          example: false
+
+    JackettIndexer:
+      type: object
+      description: Jackett indexer model
+      required:
+        - caps
+        - configured
+        - id
+        - links
+        - name
+        - site_link
+        - type
+      properties:
+        caps:
+          type: object
+          description: Capabilities configuration
+          example:
+            CategoryMapping:
+              - Cat: "Movies"
+                Desc: "Movies"
+                ID: 1
+            Modes:
+              movie-search: ["q"]
+              search: ["q"]
+              tv-search: ["q"]
+        configured:
+          type: boolean
+          example: true
+        id:
+          type: string
+          example: "rutor"
+        links:
+          type: array
+          items:
+            type: string
+          example: ["https://rutor.info", "https://rutor.is"]
+        name:
+          type: string
+          example: "RuTor"
+        site_link:
+          type: string
+          example: "https://rutor.info"
+        type:
+          type: string
+          example: "public"
+
+    JackettIndexerStatus:
+      type: object
+      description: Status of an individual indexer in a search response
+      required:
+        - ID
+        - Name
+        - Results
+        - Status
+      properties:
+        ElapsedTime:
+          type: integer
+          description: Search duration in milliseconds
+          example: 45
+        Error:
+          type: string
+          nullable: true
+          example: null
+        ID:
+          type: string
+          example: "rutor"
+        Name:
+          type: string
+          example: "RuTor"
+        Results:
+          type: integer
+          example: 1
+        Status:
+          type: integer
+          description: "Indexer status (Jackett enum: 0 = Unknown, 1 = Error, 2 = OK)"
+          example: 2
+
+    JackettResultItem:
+      type: object
+      description: Individual torrent result item
+      required:
+        - Category
+        - CategoryDesc
+        - Details
+        - DownloadVolumeFactor
+        - Guid
+        - Link
+        - Peers
+        - PublishDate
+        - Seeders
+        - Size
+        - Title
+        - Tracker
+        - TrackerId
+        - TrackerType
+        - UploadVolumeFactor
+      properties:
+        BlackholeLink:
+          type: string
+          nullable: true
+          example: null
+        Category:
+          type: array
+          items:
+            type: integer
+          example: [2040, 101640]
+        CategoryDesc:
+          type: string
+          example: "Movies"
+        Description:
+          type: string
+          nullable: true
+          example: null
+        Details:
+          type: string
+          example: "https://rutor.info/torrent/300001"
+        DownloadVolumeFactor:
+          type: number
+          example: 0.0
+        Files:
+          type: integer
+          nullable: true
+          example: null
+        FirstSeen:
+          type: string
+          example: "2026-08-15T12:00:00.000Z"
+        Gain:
+          type: number
+          example: 697.68
+        Grabs:
+          type: integer
+          nullable: true
+          example: 5
+        Guid:
+          type: string
+          example: "https://rutor.info/torrent/300001"
+        InfoHash:
+          type: string
+          nullable: true
+          example: "0123456789ABCDEF0123456789ABCDEF01234567"
+        Link:
+          type: string
+          nullable: true
+          example: "/api/v2.0/indexers/rutor/download?url=https%3A%2F%2Fd.rutor.info%2Fdownload%2F300001"
+        MagnetUri:
+          type: string
+          nullable: true
+          example: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+        MinimumRatio:
+          type: number
+          example: 1.0
+        MinimumSeedTime:
+          type: integer
+          example: 172800
+        Peers:
+          type: integer
+          example: 15
+        PublishDate:
+          type: string
+          example: "2026-08-15T12:00:00.000Z"
+        RssId:
+          type: string
+          nullable: true
+          example: null
+        Seeders:
+          type: integer
+          example: 320
+        Size:
+          type: integer
+          example: 2341011456
+        Title:
+          type: string
+          example: "Example Release (2026) BDRip"
+        Tracker:
+          type: string
+          example: "RuTor"
+        TrackerId:
+          type: string
+          example: "rutor"
+        TrackerType:
+          type: string
+          example: "public"
+        UploadVolumeFactor:
+          type: number
+          example: 1.0
+
+    JackettSearchResponse:
+      type: object
+      description: Jackett search response envelope
+      required:
+        - Indexers
+        - Results
+      properties:
+        Indexers:
+          type: array
+          items:
+            $ref: "#/components/schemas/JackettIndexerStatus"
+        Results:
+          type: array
+          items:
+            $ref: "#/components/schemas/JackettResultItem"
+
+    MagnetResponse:
+      type: object
+      description: Magnet URI built from a tracker's .torrent file
+      required:
+        - InfoHash
+        - MagnetUri
+      properties:
+        InfoHash:
+          type: string
+          description: Uppercase hex SHA-1 v1 info hash
+          example: "0123456789ABCDEF0123456789ABCDEF01234567"
+        MagnetUri:
+          type: string
+          example: "magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567&dn=Example%20Release&tr=http%3A%2F%2Ftracker.example.org%2Fannounce"
+
+    ProviderCheckResult:
+      type: object
+      description: Availability and latency check result for a provider
+      required:
+        - isAvailable
+        - name
+      properties:
+        isAvailable:
+          type: boolean
+          example: true
+        name:
+          type: string
+          example: "RuTracker.RU"
+        responseTimeMs:
+          type: integer
+          example: 125
+
+    ProviderInfo:
+      type: object
+      description: Tracker provider name and mirror URLs
+      required:
+        - name
+        - urls
+      properties:
+        name:
+          type: string
+          example: "RuTracker.RU"
+        urls:
+          type: array
+          items:
+            type: string
+          example: ["https://rutracker.org", "https://rutracker.net"]
+
+    ProviderStatusMap:
+      type: object
+      description: Connectivity status for providers keyed by provider name
+      additionalProperties:
+        type: boolean
+      example:
+        Kinozal: true
+        NoNaMe Club: true
+        RuTor: true
+        RuTracker.RU: true
+
+    TopicDetails:
+      type: object
+      description: Detailed metadata for a torrent topic
+      required:
+        - actors
+        - audioTranslation
+        - category
+        - description
+        - director
+        - duration
+        - id
+        - imdbUrl
+        - infoHash
+        - kinopoiskUrl
+        - magnetUri
+        - name
+        - posterUrl
+        - releaseCountry
+        - torrentUrl
+        - url
+        - year
+      properties:
+        actors:
+          type: array
+          items:
+            type: string
+          example: ["Актер Первый", "Актер Второй"]
+        audioTranslation:
+          type: string
+          example: "Профессиональный"
+        category:
+          type: string
+          example: "Фильмы"
+        description:
+          type: string
+          example: "Вымышленное описание для примера."
+        director:
+          type: string
+          example: "Тестовый Режиссер"
+        duration:
+          type: string
+          example: "01:45:00"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/TorrentFile"
+        id:
+          type: string
+          example: "100001"
+        imdbId:
+          type: string
+          example: "1234567"
+        imdbUrl:
+          type: string
+          example: "https://www.imdb.com/title/tt1234567/"
+        infoHash:
+          type: string
+          example: "0123456789abcdef0123456789abcdef01234567"
+        kinopoiskId:
+          type: string
+          example: "7654321"
+        kinopoiskUrl:
+          type: string
+          example: "https://www.kinopoisk.ru/film/7654321/"
+        magnetUri:
+          type: string
+          example: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+        name:
+          type: string
+          example: "Пример Фильма / Example Movie (2026) BDRip 1080p"
+        posterUrl:
+          type: string
+          example: "https://example.com/poster.jpg"
+        releaseCountry:
+          type: string
+          example: "Примерная Страна"
+        torrentUrl:
+          type: string
+          example: "https://rutracker.org/forum/dl.php?t=100001"
+        url:
+          type: string
+          example: "https://rutracker.org/forum/viewtopic.php?t=100001"
+        year:
+          type: string
+          example: "2026"
+
+    TorrentFile:
+      type: object
+      description: Individual file within a torrent release
+      required:
+        - name
+        - size
+      properties:
+        name:
+          type: string
+          example: "sample.movie.2026.1080p.mkv"
+        size:
+          type: string
+          example: "1.45 GB"
+        sizeBytes:
+          type: integer
+          example: 1556925645
+
+    TorrentItem:
+      type: object
+      description: Search result item for a torrent
+      required:
+        - category
+        - date
+        - downloadCount
+        - id
+        - leechers
+        - name
+        - seeders
+        - size
+        - torrentUrl
+        - url
+      properties:
+        category:
+          type: string
+          example: "Наше кино"
+        date:
+          type: string
+          example: "15.08.2026"
+        downloadCount:
+          type: integer
+          example: 350
+        id:
+          type: string
+          example: "100001"
+        leechers:
+          type: integer
+          example: 12
+        magnetUri:
+          type: string
+          example: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+        name:
+          type: string
+          example: "Пример Фильма / Example Movie (2026) BDRip 1080p"
+        seeders:
+          type: integer
+          example: 150
+        size:
+          type: string
+          example: "1.45 GB"
+        sizeBytes:
+          type: integer
+          example: 1556925645
+        torrentUrl:
+          type: string
+          example: "https://rutracker.org/forum/dl.php?t=100001"
+        url:
+          type: string
+          example: "https://rutracker.org/forum/viewtopic.php?t=100001"
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Optional API key passed via HTTP header
+    ApiKeyQuery:
+      type: apiKey
+      in: query
+      name: apikey
+      description: Optional API key passed via query parameter
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Optional API key passed as a Bearer token

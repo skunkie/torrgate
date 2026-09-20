@@ -1,0 +1,57 @@
+{
+  "name": "torrgate",
+  "version": "1.0.0",
+  "description": "High-performance TypeScript API gateway and proxy for torrent trackers, powered by pluggable Cardigann YAML definitions and modular providers",
+  "main": "dist/src/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "coverage": "node --import tsx --test --experimental-test-coverage \"tests/**/*.test.ts\"",
+    "dev": "tsx watch src/server.ts",
+    "lint": "eslint api/ src/ tests/",
+    "lint:fix": "eslint api/ src/ tests/ --fix",
+    "lint:reuse": "reuse lint",
+    "start": "node dist/src/server.js",
+    "test": "tsx --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "torrent",
+    "tracker",
+    "api",
+    "gateway",
+    "cardigann",
+    "jackett",
+    "indexer",
+    "proxy"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "axios": "^1.8.1",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "http-proxy-agent": "^7.0.2",
+    "https-proxy-agent": "^7.0.6",
+    "iconv-lite": "^0.6.3",
+    "yaml": "^2.9.1",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "@stylistic/eslint-plugin": "^3.1.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.4",
+    "@types/yargs": "^17.0.33",
+    "eslint": "^9.20.1",
+    "eslint-plugin-perfectionist": "^4.9.0",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.1"
+  }
+}
