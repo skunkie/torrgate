@@ -51,9 +51,6 @@ export class UpstashRedisCache<T = unknown> implements CacheStore<T>, RequestSlo
     }
   }
 
-  /**
-   * Removes a specific key from the cache.
-   */
   async delete(key: string): Promise<boolean> {
     try {
       const result = await this.sendCommand<number>(['DEL', key]);
@@ -63,9 +60,6 @@ export class UpstashRedisCache<T = unknown> implements CacheStore<T>, RequestSlo
     }
   }
 
-  /**
-   * Retrieves a value from Upstash Redis if it exists and has not expired.
-   */
   async get<R = T>(key: string): Promise<R | undefined> {
     try {
       const raw = await this.sendCommand<unknown>(['GET', key]);
@@ -87,9 +81,6 @@ export class UpstashRedisCache<T = unknown> implements CacheStore<T>, RequestSlo
     }
   }
 
-  /**
-   * Stores a value in Upstash Redis with TTL in seconds.
-   */
   async set(key: string, value: T, ttlSeconds?: number): Promise<void> {
     const effectiveTtl = ttlSeconds !== undefined ? ttlSeconds : this.defaultTtlSeconds;
     if (effectiveTtl <= 0) {
@@ -104,9 +95,6 @@ export class UpstashRedisCache<T = unknown> implements CacheStore<T>, RequestSlo
     }
   }
 
-  /**
-   * Internal helper executing a Redis command array against the Upstash REST endpoint.
-   */
   private async sendCommand<R = unknown>(command: (number | string)[]): Promise<R | undefined> {
     const response = await fetch(this.baseUrl, {
       body: JSON.stringify(command),

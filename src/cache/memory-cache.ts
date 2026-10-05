@@ -10,14 +10,8 @@ interface CacheEntry<T> {
   value: T;
 }
 
-/**
- * Default memory budget for {@link MemoryCache}.
- */
 export const DEFAULT_MEMORY_CACHE_BYTES = 64 * 1024 * 1024;
 
-/**
- * Approximates the memory an entry holds by the size of its serialized form.
- */
 function estimateSizeBytes(key: string, value: unknown): number {
   const serialized = typeof value === 'string' ? value : JSON.stringify(value) ?? '';
   return Buffer.byteLength(key) + Buffer.byteLength(serialized);
@@ -52,17 +46,11 @@ export class MemoryCache<T> implements CacheStore<T> {
     }
   }
 
-  /**
-   * Clears all cached entries.
-   */
   clear(): void {
     this.store.clear();
     this.totalSizeBytes = 0;
   }
 
-  /**
-   * Removes a specific key from the cache.
-   */
   delete(key: string): boolean {
     const entry = this.store.get(key);
     if (!entry) {
@@ -98,9 +86,6 @@ export class MemoryCache<T> implements CacheStore<T> {
     return evicted;
   }
 
-  /**
-   * Retrieves a value from the cache if it exists and has not expired.
-   */
   get<R = T>(key: string): R | undefined {
     const entry = this.store.get(key);
     if (!entry) {
@@ -118,16 +103,10 @@ export class MemoryCache<T> implements CacheStore<T> {
     return entry.value as unknown as R;
   }
 
-  /**
-   * Checks whether an unexpired key exists in the cache.
-   */
   has(key: string): boolean {
     return this.get(key) !== undefined;
   }
 
-  /**
-   * Stores a value in the cache with an optional TTL in seconds.
-   */
   set(key: string, value: T, ttlSeconds?: number): void {
     const effectiveTtl = ttlSeconds !== undefined ? ttlSeconds : this.defaultTtlSeconds;
     if (effectiveTtl <= 0) {
@@ -162,16 +141,10 @@ export class MemoryCache<T> implements CacheStore<T> {
     this.totalSizeBytes += sizeBytes;
   }
 
-  /**
-   * Returns the count of entries currently in the cache.
-   */
   get size(): number {
     return this.store.size;
   }
 
-  /**
-   * Approximate bytes held by cached entries.
-   */
   get sizeBytes(): number {
     return this.totalSizeBytes;
   }

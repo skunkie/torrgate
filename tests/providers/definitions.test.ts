@@ -12,7 +12,7 @@ import iconv from 'iconv-lite';
 import { HttpClient } from '../../src/http/http-client.js';
 import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
 import { loadDefinitionsFromDir } from '../../src/providers/loader.js';
-import { testBigFANGroupSearchHtml } from '../fixtures/bigfangroup.fixture.js';
+import { testBigFanGroupSearchHtml } from '../fixtures/bigfangroup.fixture.js';
 import { testKinozalSearchHtml } from '../fixtures/kinozal.fixture.js';
 import { testMegaPeerSearchHtml } from '../fixtures/megapeer.fixture.js';
 import { testNewStudioSearchHtml } from '../fixtures/newstudio.fixture.js';
@@ -45,7 +45,7 @@ describe('Jackett Cardigann Definitions Compatibility', () => {
         res.end(iconv.encode(testMegaPeerSearchHtml, 'win1251'));
       } else if (url.includes('/bigfangroup/')) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=windows-1251' });
-        res.end(iconv.encode(testBigFANGroupSearchHtml, 'win1251'));
+        res.end(iconv.encode(testBigFanGroupSearchHtml, 'win1251'));
       } else if (url.includes('/newstudio/')) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(testNewStudioSearchHtml);

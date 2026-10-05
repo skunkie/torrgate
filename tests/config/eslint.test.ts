@@ -7,11 +7,24 @@ import { describe, it } from 'node:test';
 
 import { ESLint } from 'eslint';
 
+import { THEME_SCRIPT } from '../../src/api/views/theme-script.js';
+import { WEB_CLIENT_SCRIPT } from '../../src/api/views/web-client-script.js';
+
 describe('Property ordering rules', () => {
   const overrideConfig = [{ languageOptions: { parserOptions: { projectService: false } } }];
   const eslint = new ESLint({ overrideConfig });
   const fixer = new ESLint({ fix: true, overrideConfig });
   const filePath = 'src/types/torrent.ts';
+
+  it('should keep embedded browser script properties in alphabetical order', async () => {
+    for (const source of [THEME_SCRIPT, WEB_CLIENT_SCRIPT]) {
+      const [result] = await eslint.lintText(source, { filePath });
+      const orderingErrors = result.messages.filter(message =>
+        message.fatal || message.ruleId === 'perfectionist/sort-objects'
+      );
+      assert.deepEqual(orderingErrors, []);
+    }
+  });
 
   it('should reject reversed Cyrillic properties in objects, types, interfaces, and classes', async () => {
     const cases = [

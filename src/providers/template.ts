@@ -4,10 +4,10 @@
 
 import { TemplateContext } from './types.js';
 
-type ASTNode =
-  | { branches: Array<{ body: ASTNode[]; condition?: string }>; type: 'if' }
+type AstNode =
+  | { branches: Array<{ body: AstNode[]; condition?: string }>; type: 'if' }
   | { index: number; path: string; type: 'index' }
-  | { body: ASTNode[]; path: string; type: 'range' }
+  | { body: AstNode[]; path: string; type: 'range' }
   | { type: 'text'; value: string }
   | { path: string; type: 'var' };
 
@@ -112,13 +112,13 @@ function evaluateCondition(
 }
 
 interface StackFrame {
-  body: ASTNode[];
-  branches?: Array<{ body: ASTNode[]; condition?: string }>;
+  body: AstNode[];
+  branches?: Array<{ body: AstNode[]; condition?: string }>;
   kind: 'if' | 'range' | 'root';
   path?: string;
 }
 
-function parseTemplate(templateStr: string): ASTNode[] {
+function parseTemplate(templateStr: string): AstNode[] {
   const tagRegex = /\{\{\s*([\s\S]*?)\s*\}\}/g;
   const rootFrame: StackFrame = { body: [], kind: 'root' };
   const stack: StackFrame[] = [rootFrame];
@@ -141,7 +141,7 @@ function parseTemplate(templateStr: string): ASTNode[] {
       stack.push(newFrame);
     } else if (tagContent.startsWith('if ')) {
       const condition = tagContent.slice(3).trim();
-      const firstBranch: { body: ASTNode[]; condition: string } = { body: [], condition };
+      const firstBranch: { body: AstNode[]; condition: string } = { body: [], condition };
       const newFrame: StackFrame = {
         body: firstBranch.body,
         branches: [firstBranch],
@@ -152,14 +152,14 @@ function parseTemplate(templateStr: string): ASTNode[] {
       const top = stack[stack.length - 1];
       if (top && top.kind === 'if' && top.branches) {
         const condition = tagContent.slice(8).trim();
-        const branch: { body: ASTNode[]; condition: string } = { body: [], condition };
+        const branch: { body: AstNode[]; condition: string } = { body: [], condition };
         top.branches.push(branch);
         top.body = branch.body;
       }
     } else if (tagContent === 'else') {
       const top = stack[stack.length - 1];
       if (top && top.kind === 'if' && top.branches) {
-        const branch: { body: ASTNode[] } = { body: [] };
+        const branch: { body: AstNode[] } = { body: [] };
         top.branches.push(branch);
         top.body = branch.body;
       }
@@ -205,7 +205,7 @@ function parseTemplate(templateStr: string): ASTNode[] {
 }
 
 function evaluateNodes(
-  nodes: ASTNode[],
+  nodes: AstNode[],
   context: TemplateContext,
   currentItem?: unknown
 ): string {

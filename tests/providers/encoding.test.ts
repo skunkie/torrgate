@@ -16,7 +16,7 @@ describe('windows-1251 Query Encoding', () => {
       assert.equal(encodeWin1251QueryParam(sample), sample);
     });
 
-    it('should encode spaces as plus by default or as %20 when spaceAsPlus is false', () => {
+    it('should encode spaces as plus by default or as %20 when plus encoding is disabled', () => {
       const sample = 'Sample Search Query';
       assert.equal(encodeWin1251QueryParam(sample), 'Sample+Search+Query');
       assert.equal(encodeWin1251QueryParam(sample, false), 'Sample%20Search%20Query');

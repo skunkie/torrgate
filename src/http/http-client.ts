@@ -57,7 +57,7 @@ export function mergeCookieHeader(existingHeader: string | undefined, setCookieH
 /**
  * Encodes a string into windows-1251 percent-encoded bytes.
  */
-export function encodeWin1251QueryParam(str: string, spaceAsPlus: boolean = true): string {
+export function encodeWin1251QueryParam(str: string, shouldEncodeSpaceAsPlus: boolean = true): string {
   const buf = iconv.encode(str, 'win1251');
   let out = '';
   for (let i = 0; i < buf.length; i++) {
@@ -72,7 +72,7 @@ export function encodeWin1251QueryParam(str: string, spaceAsPlus: boolean = true
       byte === 0x7e
     ) {
       out += String.fromCharCode(byte);
-    } else if (byte === 0x20 && spaceAsPlus) {
+    } else if (byte === 0x20 && shouldEncodeSpaceAsPlus) {
       out += '+';
     } else {
       out += `%${byte.toString(16).toUpperCase().padStart(2, '0')}`;

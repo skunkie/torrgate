@@ -5,7 +5,7 @@
 /**
  * Synthetic BigFANGroup HTML search response containing invented test releases.
  */
-export const testBigFANGroupSearchHtml = `
+export const testBigFanGroupSearchHtml = `
 <!DOCTYPE html>
 <html>
 <body>

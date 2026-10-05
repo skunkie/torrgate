@@ -113,9 +113,9 @@ export class RequestThrottle {
 }
 
 /**
- * Resolves after `ms`, or rejects with the signal's reason once `signal` aborts.
+ * Resolves after `durationMs`, or rejects with the signal's reason once `signal` aborts.
  */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+function sleep(durationMs: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
       reject(signal.reason);
@@ -128,7 +128,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     const timer = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort);
       resolve();
-    }, ms);
+    }, durationMs);
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }

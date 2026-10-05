@@ -35,12 +35,11 @@ export class SessionManager {
   private readonly cookies: Map<string, string> = new Map();
   private readonly definition: CardigannDefinition;
   private readonly encoding: 'utf-8' | 'windows-1251';
-  /** Set once an env-var cookie has been checked against the tracker and rejected, so it isn't retried. */
-  private envCookieRejected: boolean = false;
-  /** Whether the current session came from an env-var cookie that hasn't been checked against the live tracker yet. */
-  private envCookieVerified: boolean = false;
   private readonly httpClient: HttpClient;
   private isAuthenticated: boolean = false;
+  /** Set once an env-var cookie has been checked against the tracker and rejected, so it isn't retried. */
+  private isEnvCookieRejected: boolean = false;
+  private isEnvCookieVerified: boolean = false;
   private pendingLogin: Promise<boolean> | null = null;
   private pendingRecovery: Promise<SessionRecoveryOutcome> | null = null;
   private pendingVerification: Promise<boolean> | null = null;
@@ -99,7 +98,7 @@ export class SessionManager {
 
     const providerId = this.getProviderId();
 
-    const envCookie = this.envCookieRejected
+    const envCookie = this.isEnvCookieRejected
       ? undefined
       : process.env[`TORRGATE_${providerId}_COOKIE`];
     if (envCookie) {
@@ -189,7 +188,7 @@ export class SessionManager {
       return this.ensureAuthenticated(baseUrl);
     }
 
-    if (this.sessionSource === 'cookie' && !this.envCookieVerified && login.test) {
+    if (this.sessionSource === 'cookie' && !this.isEnvCookieVerified && login.test) {
       if (!this.pendingVerification) {
         this.pendingVerification = this.verifyEnvCookie(baseUrl).finally(() => {
           this.pendingVerification = null;
@@ -229,7 +228,7 @@ export class SessionManager {
     }
 
     if (previousSource === 'cookie') {
-      this.envCookieRejected = true;
+      this.isEnvCookieRejected = true;
     }
     this.invalidate();
 
@@ -250,7 +249,7 @@ export class SessionManager {
       return true;
     }
     if (probe) {
-      this.envCookieVerified = true;
+      this.isEnvCookieVerified = true;
       return true;
     }
 
@@ -258,7 +257,7 @@ export class SessionManager {
     // session, etc). Discard it and fall back to a real login if credentials
     // are configured; mark it rejected so ensureAuthenticated doesn't just
     // re-adopt the same dead cookie instead of attempting a real login.
-    this.envCookieRejected = true;
+    this.isEnvCookieRejected = true;
     this.invalidate();
     return this.ensureAuthenticated(baseUrl);
   }
@@ -299,7 +298,7 @@ export class SessionManager {
     if (!login) {
       return true;
     }
-    if (!this.envCookieRejected && process.env[`${this.envVarPrefix}_COOKIE`]) {
+    if (!this.isEnvCookieRejected && process.env[`${this.envVarPrefix}_COOKIE`]) {
       return true;
     }
     const username = process.env[`${this.envVarPrefix}_USERNAME`] || process.env.TRACKER_USERNAME;
@@ -328,7 +327,7 @@ export class SessionManager {
    */
   invalidate(): void {
     this.isAuthenticated = false;
-    this.envCookieVerified = false;
+    this.isEnvCookieVerified = false;
     this.sessionSource = null;
     this.cookies.clear();
   }

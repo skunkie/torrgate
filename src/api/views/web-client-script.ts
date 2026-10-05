@@ -159,7 +159,7 @@ export const WEB_CLIENT_SCRIPT = String.raw`
         cards.forEach((card, idx) => {
           if (idx === index) {
             card.classList.add('active-card');
-            card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           } else {
             card.classList.remove('active-card');
           }
