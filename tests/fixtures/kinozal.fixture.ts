@@ -13,7 +13,7 @@ export const testKinozalSearchHtml = `
   <tbody>
     <tr>
       <td class="nam"><a href="/details.php?id=200001">Вымышленный Фильм / Fictional Film / 2024 / WEBRip 1080p</a></td>
-      <td class="s">Фильмы</td>
+      <td class="s bt"><img onclick="window.location='browse.php?c=13'" alt="Фильмы">Фильмы</td>
       <td class="s">4.50 ГБ</td>
       <td class="s">15.08.2024 в 14:20</td>
       <td class="sl">90</td>
@@ -21,7 +21,7 @@ export const testKinozalSearchHtml = `
     </tr>
     <tr>
       <td class="nam"><a href="/details.php?id=200002">Тестовый Сериал / Sample Show / 2023 / HDTV</a></td>
-      <td class="s">Сериалы</td>
+      <td class="s bt"><img onclick="window.location='browse.php?c=46'" alt="Сериалы">Сериалы</td>
       <td class="s">1.20 ГБ</td>
       <td class="s">вчера в 18:00</td>
       <td class="sl">45</td>

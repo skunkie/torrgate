@@ -179,6 +179,18 @@ describe('HttpClient form login redirects', () => {
       } else if (url.pathname === '/leave.php') {
         res.writeHead(302, { 'Location': `${otherHostUrl}/landing.php`, 'Set-Cookie': 'bb_session=sample-session; path=/' });
         res.end();
+      } else if (url.pathname === '/leave-and-return.php') {
+        res.writeHead(302, { 'Location': `${otherHostUrl}/return.php`, 'Set-Cookie': 'bb_session=sample-session; path=/' });
+        res.end();
+      } else if (url.pathname === '/return.php') {
+        res.writeHead(302, {
+          'Location': `${testServerUrl}/home.php`,
+          'Set-Cookie': ['bb_session=foreign-session; path=/', 'external=sample-external; path=/'],
+        });
+        res.end();
+      } else if (url.pathname === '/landing.php') {
+        res.writeHead(200, { 'Set-Cookie': 'external=sample-external; path=/' });
+        res.end('<html>Sample landing page</html>');
       } else {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end('<html>Welcome, Sample User</html>');
@@ -212,8 +224,16 @@ describe('HttpClient form login redirects', () => {
   });
 
   it('should not send collected cookies to a different host', async () => {
-    await new HttpClient().postForm(`${testServerUrl}/leave.php`, { login_username: 'sample-user' });
+    const response = await new HttpClient().postForm(`${testServerUrl}/leave.php`, { login_username: 'sample-user' });
     assert.equal(cookiesSeenByHop['/landing.php'], '');
+    assert.deepEqual(response.cookies, ['bb_session=sample-session; path=/']);
+  });
+
+  it('should preserve tracker cookies when a redirect returns from another host', async () => {
+    const response = await new HttpClient().postForm(`${testServerUrl}/leave-and-return.php`, { login_username: 'sample-user' });
+    assert.equal(cookiesSeenByHop['/return.php'], '');
+    assert.equal(cookiesSeenByHop['/home.php'], 'bb_session=sample-session');
+    assert.deepEqual(response.cookies, ['bb_session=sample-session; path=/']);
   });
 });
 
@@ -225,4 +245,3 @@ describe('mergeCookieHeader', () => {
     );
   });
 });
-

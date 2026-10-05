@@ -96,6 +96,12 @@ search:
   rows:
     selector: "tr.bg, table.t_peer tbody tr:has(td.nam)"
   fields:
+    category:
+      selector: td.bt img
+      attribute: onclick
+      filters:
+        - name: re_replace
+          args: ["[^\\d+]", ""]
     title:
       selector: "td.nam a"
     details:

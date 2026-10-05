@@ -222,8 +222,8 @@ export function torznabCatToTrackerIds(
 }
 
 /**
- * Maps a tracker's category (id or description) to its Torznab categories: the standard id
- * first, then the tracker-specific `100000 + id` when the tracker id is numeric.
+ * Maps a tracker's category (id or description) to every standard Torznab category mapped
+ * to its id, then the tracker-specific `100000 + id` when the tracker id is numeric.
  * Unmapped categories are reported as Other (8000).
  */
 export function trackerCatToTorznab(
@@ -236,7 +236,11 @@ export function trackerCatToTorznab(
     return { catDesc: desc, catIds: [OTHER_CATEGORY_ID] };
   }
 
-  const catIds = [torznabIdForName(mapping.cat) ?? OTHER_CATEGORY_ID];
+  const catIds = [...new Set(
+    mappings
+      .filter(candidate => String(candidate.id) === String(mapping.id))
+      .map(candidate => torznabIdForName(candidate.cat) ?? OTHER_CATEGORY_ID)
+  )];
   const numericId = Number(mapping.id);
   if (Number.isInteger(numericId) && String(mapping.id).trim() !== '') {
     catIds.push(CUSTOM_CATEGORY_OFFSET + numericId);
@@ -254,10 +258,21 @@ export function matchesRequestedCategories(
   requested: Set<number>,
   mappings: CardigannCategoryMapping[]
 ): boolean {
-  if (requested.size === 0 || !findTrackerMapping(trackerCat, mappings)) {
+  const mapping = findTrackerMapping(trackerCat, mappings);
+  if (requested.size === 0 || !mapping) {
     return true;
   }
-  return trackerCatToTorznab(trackerCat, mappings).catIds.some(id => requested.has(id));
+  const trackerId = Number(mapping.id);
+  if (
+    requested.has(CUSTOM_CATEGORY_OFFSET + trackerId) ||
+    (trackerId < CUSTOM_CATEGORY_OFFSET && !CATEGORY_BY_ID.has(trackerId) && requested.has(trackerId))
+  ) {
+    return true;
+  }
+  return mappings.some(candidate => {
+    const standardId = torznabIdForName(candidate.cat);
+    return String(candidate.id) === String(mapping.id) && standardId !== undefined && requested.has(standardId);
+  });
 }
 
 function findTrackerMapping(

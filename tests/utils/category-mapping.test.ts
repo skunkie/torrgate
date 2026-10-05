@@ -73,6 +73,21 @@ describe('Category Mapping Utility', () => {
   });
 
   describe('trackerCatToTorznab (Forward Translation)', () => {
+    it('should emit every standard mapping once followed by the tracker-specific id', () => {
+      const mappings = [
+        { cat: 'TV', desc: 'Sample Cartoons', id: 21 },
+        { cat: 'Movies', desc: 'Sample Cartoons', id: '21' },
+        { cat: 'TV', desc: 'Sample Cartoons', id: 21 },
+        { cat: 'Audio', id: 22 },
+      ];
+      for (const category of [21, '21', 'Sample Cartoons']) {
+        assert.deepEqual(trackerCatToTorznab(category, mappings), {
+          catDesc: 'Sample Cartoons',
+          catIds: [5000, 2000, 100021],
+        });
+      }
+    });
+
     it('should report the standard subcategory and the tracker-specific id', () => {
       assert.deepEqual(trackerCatToTorznab(2, sampleMappings), {
         catDesc: 'Sample Lossless Music',
@@ -92,6 +107,23 @@ describe('Category Mapping Utility', () => {
   });
 
   describe('matchesRequestedCategories', () => {
+    it('should match raw tracker ids consistently with request translation', () => {
+      for (const category of [6, 100006, 5040]) {
+        assert.equal(matchesRequestedCategories('6', expandTorznabCategories([category]), sampleMappings), true);
+        assert.equal(matchesRequestedCategories('5', expandTorznabCategories([category]), sampleMappings), false);
+      }
+    });
+
+    it('should match every standard mapping of a tracker category', () => {
+      const mappings = [
+        { cat: 'TV', id: 21 },
+        { cat: 'Movies', id: 21 },
+      ];
+      assert.equal(matchesRequestedCategories('21', expandTorznabCategories([2000]), mappings), true);
+      assert.equal(matchesRequestedCategories('21', expandTorznabCategories([5000]), mappings), true);
+      assert.equal(matchesRequestedCategories('21', expandTorznabCategories([3000]), mappings), false);
+    });
+
     it('should keep results in a requested category or beneath a requested parent', () => {
       const requested = expandTorznabCategories([5000]);
       assert.equal(matchesRequestedCategories(5, requested, sampleMappings), true);

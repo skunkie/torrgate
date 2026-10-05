@@ -158,6 +158,23 @@ describe('Jackett Cardigann Definitions Compatibility', () => {
     assert.match(results[0].name, /Вымышленный Фильм \/ Fictional Film/);
     assert.equal(results[0].seeders, 90);
     assert.equal(results[0].leechers, 8);
+    assert.equal(results[0].category, '13');
+    assert.equal(results[1].category, '46');
+  });
+
+  it('should filter Kinozal results by standard and tracker categories', async () => {
+    const definition = providers.find(provider => provider.id === 'kinozal')!.definition;
+    const testProvider = new CardigannProvider(
+      { ...definition, links: [`${baseUrl}/kinozal/`] },
+      httpClient
+    );
+
+    for (const category of [2000, 13, 100013]) {
+      const results = await testProvider.searchByTitle({ categories: [category], query: 'Sample' });
+      assert.deepEqual(results.map(result => result.id), ['200001']);
+    }
+    const results = await testProvider.searchByTitle({ categories: [5000], query: 'Sample' });
+    assert.deepEqual(results.map(result => result.id), ['200002']);
   });
 
   it('should parse NoNameClub search results using Cardigann definition', async () => {

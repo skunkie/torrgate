@@ -77,6 +77,28 @@ describe('Jackett Canonical REST v2.0 API Routes Integration', () => {
     });
   });
 
+  it('should serialize every Kinozal category mapping in JSON results and Torznab feeds', async () => {
+    const provider = registry.getProvider('kinozal')!;
+    const originalSearch = provider.searchByTitle;
+    provider.searchByTitle = async options => (await originalSearch(options)).map(item => ({ ...item, category: '21' }));
+
+    try {
+      const response = await fetch(`${baseUrl}/api/v2.0/indexers/kinozal/results?cat=2000`);
+      assert.equal(response.status, 200);
+      const data = (await response.json()) as JackettSearchResponse;
+      assert.deepEqual(data.Results[0].Category, [5000, 2000, 100021]);
+
+      const feedResponse = await fetch(`${baseUrl}/api/v2.0/indexers/kinozal/results/torznab/api?t=search&cat=2000&limit=1`);
+      assert.equal(feedResponse.status, 200);
+      const xml = await feedResponse.text();
+      const categories = [...xml.matchAll(/<torznab:attr name="category" value="(\d+)" \/>/g)]
+        .map(match => Number(match[1]));
+      assert.deepEqual(categories, [5000, 2000, 100021]);
+    } finally {
+      provider.searchByTitle = originalSearch;
+    }
+  });
+
   it('GET /api/v2.0/indexers should return all registered indexers in Jackett format', async () => {
     const res = await fetch(`${baseUrl}/api/v2.0/indexers`);
     assert.equal(res.status, 200);

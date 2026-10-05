@@ -226,7 +226,7 @@ export class HttpClient {
   }
 
   /**
-   * Follows 3xx responses one hop at a time so cookies set on every hop are kept.
+   * Follows 3xx responses one hop at a time, keeping cookies set by the original host.
    *
    * Trackers commonly answer a login POST with a redirect that carries the session cookie;
    * automatic redirect handling would only expose the final page's cookies. Cookies are sent
@@ -266,7 +266,9 @@ export class HttpClient {
         { headers: hopHeaders, maxRedirects: 0, method: 'GET', signal: options.signal },
         encoding
       );
-      collectedCookies.push(...response.cookies);
+      if (nextUrl.hostname === startHost) {
+        collectedCookies.push(...response.cookies);
+      }
       currentUrl = nextUrl.toString();
     }
 
