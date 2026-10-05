@@ -5,7 +5,7 @@
 import * as cheerio from 'cheerio';
 
 import { HttpClient } from '../http/http-client.js';
-import { RequestThrottle } from '../utils/limiter.js';
+import { RequestThrottle } from '../http/request-throttle.js';
 import { renderTemplate } from './template.js';
 import { CardigannDefinition, TemplateContext } from './types.js';
 

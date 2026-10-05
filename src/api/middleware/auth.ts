@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import { ApiErrorResponse } from '../../types/api.js';
-import { FailedAttemptLimiter } from '../../utils/rate-limiter.js';
+import { FailedAttemptLimiter } from '../../utils/failed-attempt-limiter.js';
 import { isTorznabPath, TORZNAB_ERROR_CODES } from '../../utils/torznab-xml.js';
 import { sendTorznabError } from '../torznab-errors.js';
 

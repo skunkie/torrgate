@@ -5,15 +5,15 @@
 import path from 'path';
 
 import { HttpClient } from '../http/http-client.js';
-import { AggregatedSearchOutcome } from '../types/api.js';
+import { RequestSlotStore } from '../http/request-throttle.js';
 import {
+  AggregatedSearchOutcome,
   ProviderCheckResult,
   ProviderInfo,
   SearchOptions,
   TrackerProvider,
 } from '../types/provider.js';
 import { TorrentItem } from '../types/torrent.js';
-import { RequestSlotStore } from '../utils/limiter.js';
 import { CardigannProvider } from './cardigann-provider.js';
 import { loadDefinitionsFromDir } from './loader.js';
 

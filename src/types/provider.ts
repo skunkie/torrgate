@@ -6,6 +6,19 @@ import { JackettIndexerCaps } from './jackett.js';
 import { TopicDetails, TorrentItem } from './torrent.js';
 
 /**
+ * Outcome of an aggregated search containing results and errors keyed by provider id.
+ */
+export interface AggregatedSearchOutcome {
+  errors: Record<string, string>;
+  results: AggregatedSearchResult;
+}
+
+/**
+ * Aggregated search result keyed by provider id.
+ */
+export type AggregatedSearchResult = Record<string, TorrentItem[]>;
+
+/**
  * Torrent tracker provider identifier or name.
  */
 export type ProviderName = string;
@@ -55,7 +68,7 @@ export interface SearchPage {
 /**
  * A downloaded .torrent file and the file name the tracker gave it.
  */
-export interface TorrentFile {
+export interface TorrentDownload {
   data: Buffer;
   fileName: string;
 }
@@ -66,7 +79,7 @@ export interface TorrentFile {
 export interface TrackerProvider {
   checkAvailability(): Promise<ProviderCheckResult>;
   /** Fetches a .torrent file from one of the tracker's hosts, rejecting non-torrent responses. */
-  downloadTorrent(url: string): Promise<TorrentFile>;
+  downloadTorrent(url: string): Promise<TorrentDownload>;
   getTopicDetails(id: string): Promise<TopicDetails | null>;
   readonly id?: string;
   readonly name: ProviderName;

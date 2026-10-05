@@ -4,9 +4,9 @@
 
 import { Router } from 'express';
 
+import { CacheStore } from '../cache/store.js';
 import { ProviderRegistry } from '../providers/registry.js';
-import { CacheStore } from '../utils/cache.js';
-import { FailedAttemptLimiter } from '../utils/rate-limiter.js';
+import { FailedAttemptLimiter } from '../utils/failed-attempt-limiter.js';
 import { asyncHandler } from './async-handler.js';
 import { CategoryController } from './controllers/category.controller.js';
 import { DownloadController } from './controllers/download.controller.js';

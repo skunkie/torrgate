@@ -6,12 +6,12 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { after, before, describe, it } from 'node:test';
 
+import { MemoryCache } from '../../src/cache/memory-cache.js';
 import { HttpClient } from '../../src/http/http-client.js';
 import { createApp } from '../../src/index.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 import { JackettSearchResponse } from '../../src/types/jackett.js';
 import { TopicDetails, TorrentItem } from '../../src/types/torrent.js';
-import { MemoryCache } from '../../src/utils/cache.js';
 
 interface TestHttpResponse {
   body: string;

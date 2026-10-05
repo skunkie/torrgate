@@ -8,7 +8,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import iconv from 'iconv-lite';
 
 import { ProxyConfig } from '../types/config.js';
-import { ConcurrencyLimiter } from '../utils/limiter.js';
+import { ConcurrencyLimiter } from './concurrency-limiter.js';
 
 const DEFAULT_USER_AGENT =
   process.env.USER_AGENT ||

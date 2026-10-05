@@ -6,7 +6,7 @@ import { Request, Response } from 'express';
 
 import { ProviderRegistry } from '../../providers/registry.js';
 import { MagnetResponse } from '../../types/api.js';
-import { TorrentFile } from '../../types/provider.js';
+import { TorrentDownload } from '../../types/provider.js';
 import { parseTorrentMetainfo } from '../../utils/bencode.js';
 import { buildAttachmentHeader } from '../../utils/content-disposition.js';
 import { isValidIndexerId } from '../../utils/indexer.js';
@@ -18,8 +18,6 @@ import { getQueryString } from '../../utils/query.js';
  * Controller handling authenticated .torrent file proxy downloads and magnet URI extraction.
  */
 export class DownloadController {
-  constructor(private readonly registry: ProviderRegistry) {}
-
   /**
    * GET /api/v2.0/indexers/:indexer/download
    */
@@ -61,11 +59,13 @@ export class DownloadController {
     res.json(body);
   };
 
+  constructor(private readonly registry: ProviderRegistry) {}
+
   /**
    * Validates the indexer and download URL of a request and fetches the .torrent file
    * through the provider. Sends the error response and returns null when any step fails.
    */
-  private async fetchTorrentFile(req: Request, res: Response): Promise<TorrentFile | null> {
+  private async fetchTorrentFile(req: Request, res: Response): Promise<TorrentDownload | null> {
     const indexerParam =
       typeof req.params.indexer === 'string'
         ? req.params.indexer.toLowerCase()

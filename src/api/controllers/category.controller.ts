@@ -9,8 +9,6 @@ import { ProviderRegistry } from '../../providers/registry.js';
 import { isValidIndexerId } from '../../utils/indexer.js';
 
 export class CategoryController {
-  constructor(private readonly registry: ProviderRegistry) {}
-
   /**
    * GET /api/v2.0/indexers/:indexer/categories
    */
@@ -47,4 +45,6 @@ export class CategoryController {
     const categories = getCategoriesForProvider(provider);
     res.json(categories);
   };
+
+  constructor(private readonly registry: ProviderRegistry) {}
 }

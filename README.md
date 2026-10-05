@@ -212,12 +212,16 @@ src/
 │   ├── controllers/         # Search, provider, RSS, download, and category controllers
 │   ├── middleware/          # API key authentication and error handling
 │   ├── views/               # Web client, login, and PWA view templates
+│   ├── asset-routes.ts       # PWA, icons, stylesheets, and browser scripts
+│   ├── auth-routes.ts        # Sign-in and sign-out
+│   ├── page-routes.ts        # Web client and API documentation
 │   └── routes.ts            # Canonical Jackett REST v2.0 routes
+├── cache/                   # Cache contracts, memory and Upstash stores, configuration factory
 ├── config/                  # Server configuration and category mappings
-├── http/                    # Resilient HTTP client and charset transcoding
-├── providers/               # Cardigann definition engine and ProviderRegistry
+├── http/                    # HTTP client, charset transcoding, concurrency and request scheduling
+├── providers/               # Cardigann execution, result extraction, sessions, and ProviderRegistry
 ├── types/                   # TypeScript interfaces and domain models
-├── utils/                   # Pure parsing utilities (date, size, peers, Torznab XML)
+├── utils/                   # Parsing, Torznab serialization, and failed authentication attempt limiting
 ├── index.ts                 # Express application factory
 └── server.ts                # HTTP server entry point for local and self-hosted runs
 tests/                       # Comprehensive test suites mirroring src/

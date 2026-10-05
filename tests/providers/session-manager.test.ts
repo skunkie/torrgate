@@ -7,9 +7,9 @@ import http from 'node:http';
 import { after, before, beforeEach, describe, it, mock } from 'node:test';
 
 import { HttpClient } from '../../src/http/http-client.js';
+import { RequestThrottle } from '../../src/http/request-throttle.js';
 import { SessionManager } from '../../src/providers/session-manager.js';
 import { CardigannDefinition } from '../../src/providers/types.js';
-import { RequestThrottle } from '../../src/utils/limiter.js';
 
 describe('SessionManager', () => {
   let baseUrl: string;
@@ -525,4 +525,3 @@ describe('SessionManager', () => {
     }
   });
 });
-

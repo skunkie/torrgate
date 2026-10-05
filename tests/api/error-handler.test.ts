@@ -15,7 +15,7 @@ describe('Error Handler Middleware', () => {
     let statusCode = 200;
     let jsonBody: unknown;
 
-    const fakeResponse = {
+    const stubResponse = {
       json(data: unknown) {
         jsonBody = data;
         return this;
@@ -32,7 +32,7 @@ describe('Error Handler Middleware', () => {
     const sampleError = new Error('Database connection failed');
     sampleError.name = 'DatabaseError';
 
-    errorHandler(sampleError, {} as never, fakeResponse as never, (() => {}) as never);
+    errorHandler(sampleError, {} as never, stubResponse as never, (() => {}) as never);
 
     assert.equal(statusCode, 500);
     assert.deepEqual(jsonBody, {
@@ -47,7 +47,7 @@ describe('Error Handler Middleware', () => {
     let statusCode = 200;
     let jsonBody: unknown;
 
-    const fakeResponse = {
+    const stubResponse = {
       json(data: unknown) {
         jsonBody = data;
         return this;
@@ -63,7 +63,7 @@ describe('Error Handler Middleware', () => {
 
     const sampleError = new Error('Connect error to http://admin:supersecret@proxy.internal:8080/path failed');
 
-    errorHandler(sampleError, {} as never, fakeResponse as never, (() => {}) as never);
+    errorHandler(sampleError, {} as never, stubResponse as never, (() => {}) as never);
 
     const body = jsonBody as { message: string };
     assert.ok(!body.message.includes('supersecret'));

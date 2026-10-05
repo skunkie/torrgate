@@ -144,7 +144,6 @@ export interface TemplateContext {
   Categories?: (number | string)[];
   Category?: number | string;
   Config?: Record<string, boolean | number | string>;
-  id?: number | string;
   Id?: number | string;
   Keywords?: string;
   Page?: number;
@@ -159,4 +158,5 @@ export interface TemplateContext {
   Today?: {
     Year: number;
   };
+  id?: number | string;
 }

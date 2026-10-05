@@ -214,4 +214,3 @@ export function renderTorznabError(code: TorznabErrorCode, description: string):
 export function isTorznabPath(path: string): boolean {
   return /\/results\/torznab(?:\/api)?\/?$/.test(path);
 }
-

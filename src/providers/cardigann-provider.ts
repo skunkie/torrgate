@@ -2,58 +2,32 @@
 //
 // SPDX-License-Identifier: MIT
 
-import crypto from 'node:crypto';
-
 import { AxiosRequestConfig } from 'axios';
 import * as cheerio from 'cheerio';
 
 import { BinaryResponse, encodeWin1251QueryParam, HttpClient } from '../http/http-client.js';
+import { RequestSlotStore, RequestThrottle } from '../http/request-throttle.js';
 import {
   ProviderCheckResult,
   ProviderName,
   SearchOptions,
   SearchPage,
-  TorrentFile,
+  TorrentDownload,
   TrackerProvider,
 } from '../types/provider.js';
 import { TopicDetails, TorrentItem } from '../types/torrent.js';
 import { isTorrentFile } from '../utils/bencode.js';
-import {
-  expandTorznabCategories,
-  matchesRequestedCategories,
-  torznabCatToTrackerIds,
-} from '../utils/category-mapping.js';
+import { torznabCatToTrackerIds } from '../utils/category-mapping.js';
 import { parseContentDispositionFileName, sanitizeTorrentFileName } from '../utils/content-disposition.js';
-import { DEFAULT_TRACKER_TIME_ZONE, isValidTimeZone, normalizeDate } from '../utils/date.js';
-import { RequestSlotStore, RequestThrottle } from '../utils/limiter.js';
+import { DEFAULT_TRACKER_TIME_ZONE, isValidTimeZone } from '../utils/date.js';
 import { buildMagnetUri, extractInfoHash } from '../utils/magnet.js';
 import { findMatchingMirror } from '../utils/mirror.js';
-import { parsePeerCount } from '../utils/peers.js';
-import { parseSizeBytes } from '../utils/size.js';
+import { resolveSafeUrl } from '../utils/url.js';
 import { applyFilters } from './filters.js';
-import { getTorrentResultIdentity } from './result-identity.js';
+import { parseSearchResults } from './search-results.js';
 import { SessionManager } from './session-manager.js';
 import { renderTemplate } from './template.js';
-import { CardigannDefinition, CardigannField, TemplateContext } from './types.js';
-
-/**
- * Resolves a URL against a base URL, ensuring the scheme is safe (http, https, magnet).
- */
-export function resolveSafeUrl(rawUrl: string | undefined, baseUrl: string): string | undefined {
-  if (!rawUrl || typeof rawUrl !== 'string') return undefined;
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return undefined;
-
-  try {
-    const resolved = new URL(trimmed, baseUrl);
-    if (resolved.protocol === 'http:' || resolved.protocol === 'https:' || resolved.protocol === 'magnet:') {
-      return resolved.toString();
-    }
-  } catch {
-    return undefined;
-  }
-  return undefined;
-}
+import { CardigannDefinition, TemplateContext } from './types.js';
 
 /**
  * Reads the tracker's time zone from `<prefix>_TIMEZONE` or `TRACKER_TIMEZONE`, falling back
@@ -153,7 +127,7 @@ export class CardigannProvider implements TrackerProvider {
    * Fetches a .torrent file with the tracker session, logging in again once if the
    * tracker answers with a login or error page instead of the file.
    */
-  async downloadTorrent(url: string): Promise<TorrentFile> {
+  async downloadTorrent(url: string): Promise<TorrentDownload> {
     const baseUrl = findMatchingMirror(url, this.urls) ?? this.urls[0];
     const fetchFile = async (): Promise<BinaryResponse> => {
       const headers: Record<string, string> = {};
@@ -587,132 +561,13 @@ export class CardigannProvider implements TrackerProvider {
       throw new Error(`Tracker ${this.name} returned an error page${searchError ? `: ${searchError}` : ''}`);
     }
 
-    const workingUrl = page.workingUrl;
-    const results: TorrentItem[] = [];
-    const filterOptions = { timeZone: this.timeZone };
-    const rowsSelector = this.definition.search.rows.selector;
-    const after = this.definition.search.rows.after ?? 0;
-    const rawRows = $(rowsSelector).slice(after);
-    const rawRowCount = rawRows.length;
-
-    rawRows
-      .each((_, rowElement) => {
-        const row = $(rowElement);
-        const rowContext: TemplateContext = {
-          ...context,
-          Result: {},
-        };
-
-        const extractField = (fieldDef?: CardigannField): string => {
-          if (!fieldDef) return '';
-          if (fieldDef.text !== undefined) {
-            const rawText = String(fieldDef.text);
-            const rendered = rawText.includes('{{')
-              ? renderTemplate(rawText, rowContext)
-              : rawText;
-            return applyFilters(rendered, fieldDef.filters, rowContext, filterOptions);
-          }
-
-          let raw = '';
-          const target = fieldDef.selector ? row.find(fieldDef.selector) : row;
-
-          if (fieldDef.attribute) {
-            raw = target.attr(fieldDef.attribute) || '';
-          } else {
-            raw = target.text().trim();
-          }
-
-          return applyFilters(raw, fieldDef.filters, rowContext, filterOptions);
-        };
-
-        const fields = this.definition.search.fields;
-        for (const [key, fieldDef] of Object.entries(fields)) {
-          const val = extractField(fieldDef);
-          if (rowContext.Result) {
-            rowContext.Result[key] = val;
-          }
-        }
-
-        const title = rowContext.Result?.title ?? extractField(fields.title);
-        if (!title) return;
-
-        const detailsRaw = rowContext.Result?.details ?? extractField(fields.details);
-        const detailsUrl = resolveSafeUrl(detailsRaw, workingUrl) ?? '';
-
-        const torrentRaw = rowContext.Result?.download ?? extractField(fields.download);
-        const torrentUrl = resolveSafeUrl(torrentRaw, workingUrl) ?? '';
-        let magnetUri = rowContext.Result?.magnet ?? extractField(fields.magnet);
-        const rawInfoHash = rowContext.Result?.infohash ?? extractField(fields.infohash);
-        const infoHash = extractInfoHash(magnetUri) || extractInfoHash(rawInfoHash);
-        if (!magnetUri && infoHash) {
-          magnetUri = buildMagnetUri(infoHash, this.definition.trackers);
-        } else if (
-          magnetUri &&
-          this.definition.trackers &&
-          this.definition.trackers.length > 0 &&
-          !magnetUri.includes('&tr=')
-        ) {
-          for (const tracker of this.definition.trackers) {
-            magnetUri += `&tr=${encodeURIComponent(tracker)}`;
-          }
-        }
-        const rawSize = rowContext.Result?.size ?? extractField(fields.size);
-        const rawSeeders = rowContext.Result?.seeders ?? extractField(fields.seeders);
-        const rawLeechers = rowContext.Result?.leechers ?? extractField(fields.leechers);
-        const rawDate = rowContext.Result?.date ?? extractField(fields.date);
-        const rawCategory = rowContext.Result?.category ?? extractField(fields.category);
-        const rawGrabs = rowContext.Result?.grabs ?? extractField(fields.grabs);
-
-        let topicId =
-          rowContext.Result?.id ||
-          extractField(fields.id) ||
-          rawInfoHash;
-        if (!topicId && detailsUrl) {
-          const idMatch = detailsUrl.match(/[?&]t=(\d+)|[?&]id=(\d+)|\/torrent\/(\d+)/);
-          topicId = idMatch ? idMatch[1] || idMatch[2] || idMatch[3] : '';
-        }
-
-        results.push({
-          category: rawCategory,
-          date: normalizeDate(rawDate, this.timeZone),
-          downloadCount: parsePeerCount(rawGrabs),
-          id: topicId || String(results.length + 1),
-          leechers: parsePeerCount(rawLeechers),
-          magnetUri: magnetUri || undefined,
-          name: title,
-          seeders: parsePeerCount(rawSeeders),
-          size: rawSize,
-          sizeBytes: parseSizeBytes(rawSize),
-          torrentUrl: torrentUrl || detailsUrl,
-          url: detailsUrl,
-        });
-      });
-
-    const pageIdentity = results.length > 0
-      ? crypto
-        .createHash('sha256')
-        .update(JSON.stringify(results.map(getTorrentResultIdentity)))
-        .digest('hex')
-      : undefined;
-    const expandedCategories = expandTorznabCategories(requestedCategories);
-    const categoryItems = requestedCategories.length === 0
-      ? results
-      : results.filter(item =>
-        matchesRequestedCategories(item.category, expandedCategories, mappings)
-      );
-    const requestedFormat = options.format;
-    const items = requestedFormat === undefined
-      ? categoryItems
-      : categoryItems.filter(item => matchesVideoFormat(item.name, requestedFormat));
-    return {
-      hasMore: this.supportsPaging && rawRowCount > 0,
-      items,
-      pageIdentity,
-    };
+    return parseSearchResults($, {
+      context,
+      definition: this.definition,
+      options,
+      supportsPaging: this.supportsPaging,
+      timeZone: this.timeZone,
+      workingUrl: page.workingUrl,
+    });
   }
-}
-
-function matchesVideoFormat(title: string, format: number): boolean {
-  const numericFormat = new RegExp(`(^|\\D)${format}(?:i|p)?(?=\\D|$)`, 'i');
-  return numericFormat.test(title) || (format === 2160 && /(^|\W)4k(?=\W|$)/i.test(title));
 }

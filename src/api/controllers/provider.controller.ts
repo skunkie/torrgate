@@ -9,7 +9,19 @@ import { ProviderStatusMap } from '../../types/api.js';
 import { JackettIndexer } from '../../types/jackett.js';
 
 export class ProviderController {
-  constructor(private readonly registry: ProviderRegistry) {}
+  /**
+   * GET /api/v2.0/indexers/check or /api/v2.0/indexers/status
+   */
+  check = async (_req: Request, res: Response): Promise<void> => {
+    const checks = await this.registry.checkAllAvailability();
+    const statusMap: ProviderStatusMap = {};
+
+    for (const check of checks) {
+      statusMap[check.name] = check.isAvailable;
+    }
+
+    res.json([statusMap]);
+  };
 
   /**
    * GET /api/v2.0/indexers
@@ -28,17 +40,5 @@ export class ProviderController {
     res.json(indexers);
   };
 
-  /**
-   * GET /api/v2.0/indexers/check or /api/v2.0/indexers/status
-   */
-  check = async (_req: Request, res: Response): Promise<void> => {
-    const checks = await this.registry.checkAllAvailability();
-    const statusMap: ProviderStatusMap = {};
-
-    for (const check of checks) {
-      statusMap[check.name] = check.isAvailable;
-    }
-
-    res.json([statusMap]);
-  };
+  constructor(private readonly registry: ProviderRegistry) {}
 }

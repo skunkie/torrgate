@@ -6,12 +6,12 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { after, before, describe, it } from 'node:test';
 
+import { MemoryCache } from '../../src/cache/memory-cache.js';
 import { HttpClient } from '../../src/http/http-client.js';
 import { createApp } from '../../src/index.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 import { MAX_WINDOW_PAGE_ROUNDS } from '../../src/providers/result-window.js';
 import { TorrentItem } from '../../src/types/torrent.js';
-import { MemoryCache } from '../../src/utils/cache.js';
 import { CUSTOM_CATEGORY_OFFSET, getTorznabCategory } from '../../src/utils/category-mapping.js';
 
 function testPageItem(providerId: string, page: number): TorrentItem {

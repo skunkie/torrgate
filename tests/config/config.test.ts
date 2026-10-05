@@ -154,4 +154,3 @@ describe('Unprotected tracker account warning', () => {
     assert.equal(getUnprotectedAccountWarning({ apiKey: undefined }, { PORT: '8443' }), undefined);
   });
 });
-

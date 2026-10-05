@@ -42,7 +42,7 @@ export interface TorrentItem {
 /**
  * Individual file within a torrent release.
  */
-export interface TorrentFile {
+export interface TorrentFileEntry {
   name: string;
   size: string;
   sizeBytes?: number;
@@ -67,7 +67,7 @@ export interface TopicDetails {
   description: string;
   director: string;
   duration: string;
-  files?: TorrentFile[];
+  files?: TorrentFileEntry[];
   id: TorrentId;
   imdbId?: string;
   imdbUrl: string;

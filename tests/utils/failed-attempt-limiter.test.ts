@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { FailedAttemptLimiter } from '../../src/utils/rate-limiter.js';
+import { FailedAttemptLimiter } from '../../src/utils/failed-attempt-limiter.js';
 
 describe('FailedAttemptLimiter', () => {
   it('should block a client once it reaches the failed attempt limit within the window', () => {

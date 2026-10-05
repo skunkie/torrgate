@@ -6,8 +6,10 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
+import { createCacheFromConfig } from '../../src/cache/factory.js';
+import { MemoryCache } from '../../src/cache/memory-cache.js';
+import { UpstashRedisCache } from '../../src/cache/upstash-cache.js';
 import { ServerConfig } from '../../src/types/config.js';
-import { createCacheFromConfig, MemoryCache, UpstashRedisCache } from '../../src/utils/cache.js';
 
 describe('Upstash Redis Cache Provider', () => {
   let lastCommand: unknown = null;

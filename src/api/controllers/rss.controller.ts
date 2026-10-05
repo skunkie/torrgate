@@ -4,11 +4,11 @@
 
 import { NextFunction, Request, Response } from 'express';
 
+import { buildCacheKey, CacheStore } from '../../cache/store.js';
 import { getCategoryMappings } from '../../config/categories.js';
 import { AGGREGATE_INDEXER_ID, ProviderRegistry } from '../../providers/registry.js';
 import { collectResultWindow, WindowedResult } from '../../providers/result-window.js';
 import { SearchOptions, TrackerProvider } from '../../types/provider.js';
-import { buildCacheKey, CacheStore } from '../../utils/cache.js';
 import { parseCategoryList } from '../../utils/category-mapping.js';
 import { isValidIndexerId } from '../../utils/indexer.js';
 import { getQueryInteger, getQueryString, safeParseInt } from '../../utils/query.js';
@@ -26,13 +26,6 @@ const DEFAULT_FEED_LIMIT = 100;
 const TORZNAB_REQUEST_TYPES = new Set(['caps', 'movie', 'search', 'tv-search', 'tvsearch']);
 
 export class RssController {
-  constructor(
-    private readonly registry: ProviderRegistry,
-    private readonly cache?: CacheStore<unknown>,
-    private readonly cacheTtlSeconds = 300,
-    private readonly configuredApiKey?: string
-  ) {}
-
   /**
    * GET /api/v2.0/indexers/:indexer/results/torznab/api
    * Standard Torznab endpoint supporting t=caps and t=search/tvsearch/movie.
@@ -179,6 +172,13 @@ export class RssController {
       next(err);
     }
   };
+
+  constructor(
+    private readonly registry: ProviderRegistry,
+    private readonly cache?: CacheStore<unknown>,
+    private readonly cacheTtlSeconds = 300,
+    private readonly configuredApiKey?: string
+  ) {}
 
   private cachePolicy(apiKey: string | undefined, hasErrors = false): SearchCachePolicy {
     return { isCacheable: !hasErrors, isPrivate: Boolean(apiKey), ttlSeconds: this.cacheTtlSeconds };

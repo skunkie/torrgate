@@ -33,18 +33,25 @@ src/
 │   ├── controllers/         # Search, provider, RSS, download, and category controllers
 │   ├── middleware/          # API key authentication and error handling
 │   ├── views/               # Web client, login, and PWA view templates
+│   ├── asset-routes.ts      # PWA, icon, stylesheet, and browser script routes
 │   ├── async-handler.ts     # Routes rejected async handlers to the error middleware
+│   ├── auth-routes.ts       # Sign-in and sign-out routes
 │   ├── cache-headers.ts     # Cache-Control policy for search and feed responses
+│   ├── login-page.ts        # Sign-in page response and security policy
+│   ├── page-policy.ts       # Shared HTML security policy
+│   ├── page-routes.ts       # Web client and API documentation routes
 │   ├── routes.ts            # Canonical Jackett REST v2.0 routes (/api/v2.0/indexers/)
-│   └── torznab-errors.ts    # Torznab <error> responses for Torznab endpoints
+│   └── torznab-errors.ts     # Torznab <error> responses for Torznab endpoints
+├── cache/                   # Cache contracts, memory and Upstash stores, configuration factory
 ├── config/                  # Configuration, environment variables, proxy settings
-├── http/                    # HTTP client, proxy agents (HttpProxyAgent, HttpsProxyAgent), charset transcoding (iconv-lite)
+├── http/                    # HTTP client, proxies, charset transcoding, concurrency and request scheduling
 ├── providers/               # Tracker provider registry and Cardigann definition engine
 │   ├── cardigann-provider.ts # Cardigann definition execution engine
 │   ├── filters.ts           # Cardigann filter pipeline (trim, dateparse, re_replace, etc.)
 │   ├── loader.ts            # Definition file loader from definitions/
 │   ├── registry.ts          # Central ProviderRegistry managing dynamic indexer providers
 │   ├── result-window.ts     # Offset/limit result windows across paged indexer searches
+│   ├── search-results.ts    # Cardigann field extraction and search-result normalization
 │   ├── session-manager.ts   # Tracker authentication and cookie jar manager
 │   ├── template.ts          # Go-template evaluator
 │   └── types.ts             # Cardigann definition and template types
@@ -54,15 +61,17 @@ src/
 │   ├── jackett.ts           # Jackett wire format models (search results, indexer caps, envelopes)
 │   ├── provider.ts          # Provider interfaces, capabilities, status
 │   └── torrent.ts           # Torrent item, topic details, and category types
-├── utils/                   # Resilient parsing (date, size, peers), Torznab categories and XML, caching, rate limiting
+├── utils/                   # Parsing, Torznab categories and XML, failed authentication attempt limiting
 ├── index.ts                 # Express application factory and configured app export
 └── server.ts                # HTTP server entry point for local and self-hosted runs
 tests/
 ├── api/                     # Controller, routing, auth, caching, and Vercel entrypoint integration tests
+├── cache/                   # Memory and Upstash cache tests
 ├── config/                  # Category and configuration tests
 ├── fixtures/                # Synthetic tracker HTML, XML, and JSON responses (invented sample data only)
+├── http/                    # HTTP client, concurrency, and request scheduling tests
 ├── providers/               # Cardigann template, filter, loader, provider, encoding, and session tests
-└── utils/                   # Parsing, category mapping, cache, rate limiter, and Torznab XML tests
+└── utils/                   # Parsing, category mapping, authentication limiting, and Torznab XML tests
 ```
 
 ## Core Architectural Rules & Constraints

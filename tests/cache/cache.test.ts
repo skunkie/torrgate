@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildCacheKey, MemoryCache } from '../../src/utils/cache.js';
+import { MemoryCache } from '../../src/cache/memory-cache.js';
+import { buildCacheKey } from '../../src/cache/store.js';
 
 describe('buildCacheKey', () => {
   it('should distinguish fields containing the separator character', () => {
