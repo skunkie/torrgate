@@ -171,6 +171,7 @@ feat(providers): add resilient date parser for rutor listings
 - Treat acronyms as words in identifiers (`CardigannProvider`, `httpClient`, `torrGateApi`) while preserving their conventional uppercase spelling in user-facing prose (`API`, `URL`, `HTTP`).
 - Include units when a numeric value would otherwise be ambiguous, such as `timeoutMs`, `sizeBytes`, or `portNumber`.
 - Preserve field names defined by external APIs and wire formats when interfacing with upstream trackers. Map explicitly at the boundary to idiomatic TypeScript types.
+- Order CSS declarations in stylesheets, embedded `<style>` blocks, and inline styles using RECESS (`stylelint-config-recess-order`). Place shorthands before their longhands; custom properties keep the order that reads best. The CSS ordering tests enforce the shared Stylelint configuration.
 
 ## Code Comments & Documentation
 

@@ -5,54 +5,54 @@
 export const LOGIN_PAGE_STYLES = String.raw`
 * { box-sizing: border-box; }
 body {
-  -webkit-font-smoothing: antialiased;
-  align-items: center;
-  background: var(--bg);
-  color: var(--text);
   display: flex;
-  font: 14px/1.55 var(--font-sans);
+  align-items: center;
   justify-content: center;
-  margin: 0;
   min-height: 100dvh;
   padding: 24px 16px;
+  margin: 0;
+  font: 14px/1.55 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+  background: var(--bg);
 }
 .wrap {
-  margin: auto;
-  max-width: 380px;
-  text-align: center;
   width: 100%;
+  max-width: 380px;
+  margin: auto;
+  text-align: center;
 }
 .brand {
-  align-items: center;
   display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 20px;
   font-size: 18px;
   font-weight: 700;
-  gap: 10px;
-  justify-content: center;
   line-height: 1.2;
-  margin: 0 0 20px;
 }
 .brand-logo {
-  color: var(--accent);
   flex: none;
-  height: 24px;
   width: 24px;
+  height: 24px;
+  color: var(--accent);
 }
 .card {
+  padding: 20px;
+  margin-bottom: 16px;
+  text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--card-radius);
   box-shadow: 0 8px 24px var(--card-shadow);
-  margin-bottom: 16px;
-  padding: 20px;
-  text-align: left;
 }
 .note {
+  padding: 10px 13px;
+  margin-bottom: 16px;
+  font-size: 13px;
   border: 1px solid currentColor;
   border-radius: var(--card-radius);
-  font-size: 13px;
-  margin-bottom: 16px;
-  padding: 10px 13px;
 }
 .note.bad {
   color: var(--danger);
@@ -62,70 +62,70 @@ body {
 }
 label {
   display: block;
+  margin-bottom: 5px;
   font-size: 13px;
   font-weight: 500;
-  margin-bottom: 5px;
 }
 input[type=password] {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-  height: 44px;
-  padding: 0 14px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  width: 100%;
 }
 input[type=password]:focus {
+  outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
-  outline: none;
 }
 button {
-  cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 500;
+  cursor: pointer;
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 button[type=submit] {
+  width: 100%;
+  height: 44px;
+  padding: 0 24px;
+  color: var(--button-text);
   background: var(--button-bg);
   border: 1px solid transparent;
   border-radius: 10px;
   box-shadow: 0 4px 12px var(--button-shadow);
-  color: var(--button-text);
-  height: 44px;
-  padding: 0 24px;
-  width: 100%;
 }
 button[type=submit]:hover {
   background: var(--button-hover);
 }
 button:focus-visible {
-  box-shadow: 0 0 0 3px var(--accent-glow);
   outline: none;
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 .theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  gap: 6px;
   align-items: center;
+  width: auto;
+  padding: 6px 12px;
+  color: var(--text-muted);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  color: var(--text-muted);
-  display: inline-flex;
-  gap: 6px;
-  padding: 6px 12px;
-  position: fixed;
-  right: 16px;
-  top: 16px;
   transition: all 0.15s ease;
-  width: auto;
 }
 .theme-toggle:hover {
+  color: var(--text);
   background: var(--surface-elevated);
   border-color: var(--border-hover);
-  color: var(--text);
 }
 @media (max-width: 480px) {
   input[type=password] {

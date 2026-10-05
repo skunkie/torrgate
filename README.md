@@ -233,6 +233,8 @@ tests/                       # Comprehensive test suites mirroring src/
 
 All quality checks are automated and enforced:
 
+CSS declarations follow RECESS ordering through `stylelint-config-recess-order`. Tests check stylesheets, embedded style blocks, and inline styles; custom properties keep their chosen order.
+
 ```bash
 # Run unit and integration tests
 npm test

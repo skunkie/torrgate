@@ -65,24 +65,24 @@ export function createPageRouter(options: IndexerRouterOptions): Router {
         top: 12px;
         right: 16px;
         z-index: 1000;
-        background: #18181b;
-        border: 1px solid #27272a;
-        color: #a1a1aa;
+        display: flex;
+        gap: 6px;
+        align-items: center;
         padding: 6px 12px;
-        border-radius: 8px;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 12px;
         font-weight: 500;
+        color: #a1a1aa;
         text-decoration: none;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        transition: all 0.15s ease;
+        background: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 8px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        transition: all 0.15s ease;
       }
       .scalar-signout:hover {
-        background: #202024;
         color: #f4f4f5;
+        background: #202024;
         border-color: #3f3f46;
       }
     </style>
