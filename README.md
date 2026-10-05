@@ -31,6 +31,7 @@ TorrGate integrates tracker scrapers for RuTracker, Kinozal, RuTor, NoNameClub, 
 - **Deployment Flexibility**: Designed for deployment as a Vercel Serverless Function or as a standalone Node.js service.
 - **Interactive Documentation**: Embedded OpenAPI 3.1 specification rendered with Scalar UI at `/docs`.
 - **Interactive Web Client**: Single-page web client mounted at `/` for multi-tracker search, category filtering, one-click magnet copying (built from the `.torrent` file when the tracker lists no magnet), and direct `.torrent` downloads.
+- **Client Plugins**: Browser integrations with configurable server instances, including sending magnets to TorrPlay.
 
 ---
 
@@ -132,6 +133,26 @@ Add TorrGate as a **Torznab** indexer (in Prowlarr: *Generic Torznab*):
 Errors on Torznab URLs are returned as Torznab `<error>` documents: code `100` for a missing or wrong API key, `500` when the client is temporarily blocked after repeated wrong keys, `201` for an unknown indexer or an invalid `limit`, `offset` or `page`, and `900` when the tracker could not be searched.
 
 ---
+
+### Sending releases to TorrPlay
+
+Open **Plugins** in the web client, enable **TorrPlay**, and add a named instance. Enter the server's base URL, including any reverse-proxy path prefix, and choose authentication and torrent storage. Use **Test connection** before saving. Add more instances to send to different servers; plugins and individual instances can be disabled independently.
+
+**Send to TorrPlay** appears on search results and in release details when the plugin is enabled and a magnet can be obtained. A single enabled instance receives the release directly; multiple instances open a picker. TorrGate uses the result's magnet or obtains it through the authenticated `.torrent` endpoint, then posts the magnet and title to the selected TorrPlay server's `/api/v1/torrents` endpoint. Already-added torrents are reported separately from new additions.
+
+Instance settings, usernames, passwords, and acquired Bearer tokens are stored in this browser's local storage and restored after reloading or reopening the page. Changes synchronize across open tabs; an IndexedDB transaction coordinates local-storage writes so concurrent updates preserve removals and credential changes. If browser storage or coordination is unavailable, settings remain in memory until reload and the client reports that they were not saved. Edit an instance to enter credentials; leaving the password blank keeps saved credentials when the destination and authentication settings match. Removing an instance or changing its destination clears its saved credentials and token. Connection tests use draft credentials without saving them.
+
+For **Bearer sign-in**, enter the TorrPlay username and password. **Save & get token** obtains an access token immediately; saving alone obtains one automatically on the first request. TorrGate requests tokens from TorrPlay's `/oauth/token` endpoint using the password grant. Before each API request, it reuses the cached token if more than a minute remains, otherwise acquires a new token with the saved credentials. Concurrent requests share token acquisition. Tokens renew on demand, including after reopening the page; there is no background polling. An authentication rejection clears the cached token so the next attempt signs in again. TorrPlay does not issue refresh tokens.
+
+Requests go directly from the browser to TorrPlay. In TorrPlay's settings, add the TorrGate origin to **CORS allowed origins** (`cors_allowed_origins`), for example `https://gate.example.com` or `http://gateway.example:3000`. An origin includes the scheme, hostname, and port; it has no path. TorrPlay already trusts loopback origins. CORS permission and TorrPlay authentication are both required when authentication is enabled.
+
+The web client's Content Security Policy permits HTTP and HTTPS connections for configured integrations while loading scripts from its own origin. Browser mixed-content and local-network restrictions still apply: a hosted HTTPS gateway may require an HTTPS TorrPlay endpoint or browser permission to reach a local server. Connection errors suggest checking the URL, CORS, and browser restrictions; JavaScript cannot reliably distinguish these failures.
+
+### Adding a bundled client plugin
+
+Client plugins are bundled browser scripts registered with `window.torrGatePlugins.register`. A plugin declares `id`, `name`, `actionLabel`, `canHandle`, configuration `fields`, `send`, and `test`. Each configuration field declares an `id`, `label`, `defaultValue`, and `choices` containing labels and values. The shared framework handles instance persistence, authentication, request timeouts, and duplicate sends. The settings UI renders plugin fields and actions without tracker-specific changes.
+
+The `send` handler receives the instance, search result, resolved magnet, and shared request helper. The `test` handler receives the instance and request helper and should use a read-only endpoint. Plugins supporting Bearer sign-in provide `getToken(instance, password, request)`, returning `accessToken` and `expiresAtMs`. The token endpoint request sets `authenticate: false` and its `contentType` to avoid recursive authentication. Requests use paths relative to the instance base URL; the helper keeps them within that base path and blocks redirects. Add the plugin script to the web-client asset composition before the settings and web-client scripts, and include it in the browser-script ordering checks. External script installation is outside the bundled plugin contract.
 
 ## API Endpoints
 

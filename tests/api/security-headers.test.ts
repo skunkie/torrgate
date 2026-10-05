@@ -85,6 +85,7 @@ describe('Security headers and parameter handling', () => {
     assert.match(policy, /script-src 'self';/);
     assert.match(policy, /style-src 'self';/);
     assert.match(policy, /font-src 'self' data:;/);
+    assert.match(policy, /connect-src 'self' http: https:;/);
     assert.ok(!policy.includes("script-src 'self' 'unsafe-inline'"));
     assert.ok(!policy.includes("style-src 'self' 'unsafe-inline'"));
   });

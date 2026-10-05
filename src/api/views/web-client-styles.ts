@@ -609,6 +609,37 @@ export const WEB_CLIENT_STYLES = String.raw`
       border: 1px solid var(--border);
       border-radius: 6px;
     }
+    .plugin-form, .plugin-field {
+      display: grid;
+      gap: 8px;
+    }
+    .plugin-form {
+      margin-top: 20px;
+    }
+    .plugin-field[hidden], .plugin-form-actions [hidden] {
+      display: none;
+    }
+    .plugin-field .copy-input {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+    }
+    .plugin-toggles, .plugin-instance-list {
+      display: grid;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .plugin-toggle, .plugin-instance-row, .plugin-form-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .plugin-instance-row span {
+      flex: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
     .table-responsive {
       width: 100%;
       overflow-x: auto;

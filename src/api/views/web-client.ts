@@ -51,6 +51,10 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
         </div>
       </div>
       <div class="header-right">
+        <button type="button" class="nav-btn" id="btn-open-plugins" title="Configure client plugins">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3v5m8-5v5M6 8h12v4a6 6 0 0 1-12 0V8Zm6 10v3"></path></svg>
+          <span>Plugins</span>
+        </button>
         <button class="nav-btn" id="btn-open-trackers" title="View Tracker Status">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
@@ -272,6 +276,51 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
       <div class="modal-footer">
         <button type="button" class="nav-btn primary" data-close="modal-integration">Close</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-plugins">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="plugins-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="plugins-title">Client plugins</h2>
+        <button type="button" class="modal-close" data-close="modal-plugins" aria-label="Close plugins">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="integration-description">Enable an integration and configure the servers you want to send releases to. Instance settings, passwords, and tokens are saved in this browser.</p>
+        <div id="plugin-toggles" class="plugin-toggles"></div>
+        <div id="plugin-instance-list" class="plugin-instance-list"></div>
+        <form id="plugin-instance-form" class="plugin-form">
+          <h3 id="plugin-form-title">Add instance</h3>
+          <label class="plugin-field">Plugin<select id="plugin-instance-plugin" class="copy-input"></select></label>
+          <label class="plugin-field">Instance name<input id="plugin-instance-name" class="copy-input" required maxlength="100" placeholder="Living room"></label>
+          <label class="plugin-field">Base URL<input type="url" id="plugin-instance-url" class="copy-input" required placeholder="https://play.example.com"></label>
+          <label class="plugin-toggle"><input type="checkbox" id="plugin-instance-enabled" checked> Enable instance</label>
+          <label class="plugin-field">Authentication<select id="plugin-instance-auth" class="copy-input"><option value="none">None</option><option value="basic">Basic</option><option value="bearer">Bearer sign-in (automatic renewal)</option></select></label>
+          <label class="plugin-field" id="plugin-username-field" hidden>Username<input id="plugin-instance-username" class="copy-input" autocomplete="off"></label>
+          <label class="plugin-field" id="plugin-secret-field" hidden><span id="plugin-secret-label">Password</span><input type="password" id="plugin-instance-secret" class="copy-input" autocomplete="off"></label>
+          <div id="plugin-instance-options" class="plugin-form"></div>
+          <p class="integration-description">Allow <code id="plugin-gateway-origin"></code> in TorrPlay’s CORS allowed origins. HTTPS pages need a browser-compatible connection to the server.</p>
+          <div class="plugin-form-actions">
+            <button type="button" class="nav-btn" id="btn-plugin-test">Test connection</button>
+            <button type="button" class="nav-btn" id="btn-plugin-token" hidden>Save &amp; get token</button>
+            <button type="submit" class="nav-btn primary">Save instance</button>
+            <button type="button" class="nav-btn" id="btn-plugin-reset">Cancel edit</button>
+          </div>
+          <p id="plugin-connection-status" class="integration-description" role="status"></p>
+        </form>
+      </div>
+      <div class="modal-footer"><button type="button" class="nav-btn primary" data-close="modal-plugins">Done</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-plugin-targets">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="plugin-target-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="plugin-target-title">Send release</h2>
+        <button type="button" class="modal-close" data-close="modal-plugin-targets" aria-label="Close instance picker">&times;</button>
+      </div>
+      <div class="modal-body"><label class="plugin-field">Choose instance<select id="plugin-target-select" class="copy-input"></select></label></div>
+      <div class="modal-footer"><button type="button" class="nav-btn primary" id="btn-plugin-send">Send</button></div>
     </div>
   </div>
 

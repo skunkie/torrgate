@@ -120,7 +120,7 @@ export function createPageRouter(options: IndexerRouterOptions): Router {
 
     res.setHeader(
       'Content-Security-Policy',
-      `default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; ${BASE_PAGE_POLICY}`
+      `default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' http: https:; manifest-src 'self'; worker-src 'self'; ${BASE_PAGE_POLICY}`
     );
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(renderWebClientPage({ hasAuth: Boolean(options.apiKey) }));

@@ -55,6 +55,10 @@ describe('TorrGate Web Client & Authentication', () => {
       assert.match(html, /id="modal-shortcuts"/);
       assert.match(html, /id="btn-open-shortcuts"/);
       assert.match(html, /id="theme-toggle"/);
+      assert.match(html, /id="btn-open-plugins"/);
+      assert.match(html, /id="modal-plugins"/);
+      assert.match(html, /id="plugin-instance-form"/);
+      assert.match(html, /id="modal-plugin-targets"/);
       assert.match(html, /<meta name="theme-color" id="theme-color" content="#0f0f0f">/);
       assert.match(html, /<script src="\/theme\.js"><\/script>/);
       assert.match(html, /<link rel="stylesheet" href="\/web-client\.css">/);
@@ -76,6 +80,12 @@ describe('TorrGate Web Client & Authentication', () => {
       assert.match(script, /btn-view-details/);
       assert.match(script, /function isSafeUrl\(/);
       assert.match(script, /tracker-switch/);
+      assert.match(script, /window\.torrGatePlugins\.register\(/);
+      assert.match(script, /Send to TorrPlay/);
+      assert.match(script, /api\/v1\/torrents/);
+      assert.match(script, /torrGatePluginUi\.renderActions\(item, index\)/);
+      assert.match(script, /torrGatePluginUi\.renderActions\(item, idx\)/);
+      assert.match(script, /torrGatePluginUi\.renderActions\(item, idx\) \+\s+magnetBtn \+/);
     });
 
     it('GET / should include a tracker failure notice filled with text nodes, not HTML', async () => {

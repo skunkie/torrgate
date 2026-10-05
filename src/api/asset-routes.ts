@@ -5,7 +5,9 @@
 import { Router } from 'express';
 
 import { getQueryString } from '../utils/query.js';
+import { CLIENT_PLUGINS_SCRIPT } from './views/client-plugins-script.js';
 import { LOGIN_PAGE_STYLES } from './views/login-styles.js';
+import { PLUGIN_SETTINGS_SCRIPT } from './views/plugin-settings-script.js';
 import {
   generateFaviconIco,
   generatePngIcon,
@@ -16,6 +18,7 @@ import {
 } from './views/pwa.js';
 import { THEME_SCRIPT } from './views/theme-script.js';
 import { THEME_STYLES } from './views/theme-styles.js';
+import { TORRPLAY_PLUGIN_SCRIPT } from './views/torrplay-plugin-script.js';
 import { WEB_CLIENT_SCRIPT } from './views/web-client-script.js';
 import { WEB_CLIENT_STYLES } from './views/web-client-styles.js';
 
@@ -66,7 +69,7 @@ export function createAssetRouter(): Router {
   router.get('/web-client.js', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.send(WEB_CLIENT_SCRIPT);
+    res.send(`${CLIENT_PLUGINS_SCRIPT}${TORRPLAY_PLUGIN_SCRIPT}${PLUGIN_SETTINGS_SCRIPT}${WEB_CLIENT_SCRIPT}`);
   });
 
   router.get('/login.css', (_req, res) => {

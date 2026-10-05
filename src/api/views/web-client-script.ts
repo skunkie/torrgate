@@ -30,6 +30,21 @@ export const WEB_CLIENT_SCRIPT = String.raw`
       const modalShortcuts = document.getElementById('modal-shortcuts');
       let activeResultIndex = -1;
 
+      window.torrGatePluginUi.initialize({
+        closeModal,
+        escapeHtml,
+        openModal,
+        refreshActions: function() {
+          if (currentResults.length) sortAndRenderResults();
+          if (modalDetails.classList.contains('open') && detailsItem) {
+            const index = currentResults.indexOf(detailsItem);
+            if (index >= 0) window.viewDetails(index);
+          }
+        },
+        resolveMagnet,
+        showToast,
+      });
+
       // Populate integration URLs
       const origin = window.location.origin;
       document.getElementById('feed-url-all').value = origin + '/api/v2.0/indexers/all/results/torznab/api';
@@ -79,6 +94,12 @@ export const WEB_CLIENT_SCRIPT = String.raw`
         disableOfflineTrackers();
       });
       document.addEventListener('click', function(e) {
+        const pluginButton = e.target.closest('.btn-plugin-action');
+        if (pluginButton) {
+          const item = currentResults[parseInt(pluginButton.getAttribute('data-index'), 10)];
+          if (item) window.torrGatePluginUi.handleAction(pluginButton, item);
+          return;
+        }
         const copyButton = e.target.closest('.btn-copy-input');
         if (copyButton) {
           copyFromInput(copyButton.getAttribute('data-input-id'));
@@ -109,6 +130,7 @@ export const WEB_CLIENT_SCRIPT = String.raw`
 
       resultsList.addEventListener('click', function(e) {
         if (!e.target || typeof e.target.closest !== 'function') return;
+        if (e.target.closest('.btn-plugin-action')) return;
 
         const magnetBtn = e.target.closest('.btn-copy-magnet');
         if (magnetBtn) {
@@ -321,7 +343,7 @@ export const WEB_CLIENT_SCRIPT = String.raw`
         if (!item || !item.Link) return null;
         try {
           const parsed = new URL(item.Link, window.location.origin);
-          if (!parsed.pathname.startsWith('/api/v2.0/indexers/') || !parsed.pathname.endsWith('/download')) {
+          if (parsed.origin !== window.location.origin || !/^\/api\/v2\.0\/indexers\/[^/]+\/download$/.test(parsed.pathname)) {
             return null;
           }
           return parsed.pathname.slice(0, -'/download'.length) + '/magnet' + parsed.search;
@@ -439,6 +461,7 @@ export const WEB_CLIENT_SCRIPT = String.raw`
           '</div>' +
           infoHashHtml +
           magnetHtml +
+          '<div class="details-actions">' + window.torrGatePluginUi.renderActions(item, index) + '</div>' +
           topicLinkHtml;
 
         openModal(modalDetails);
@@ -765,6 +788,7 @@ export const WEB_CLIENT_SCRIPT = String.raw`
               '</div>' +
             '</div>' +
             '<div class="torrent-actions">' +
+              window.torrGatePluginUi.renderActions(item, idx) +
               magnetBtn +
               downloadBtn +
               '<button type="button" class="action-btn btn-view-details" data-index="' + idx + '" title="View Topic Details">Info</button>' +
