@@ -299,7 +299,7 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
           <label class="plugin-field" id="plugin-username-field" hidden>Username<input id="plugin-instance-username" class="copy-input" autocomplete="off"></label>
           <label class="plugin-field" id="plugin-secret-field" hidden><span id="plugin-secret-label">Password</span><input type="password" id="plugin-instance-secret" class="copy-input" autocomplete="off"></label>
           <div id="plugin-instance-options" class="plugin-form"></div>
-          <p class="integration-description">Allow <code id="plugin-gateway-origin"></code> in TorrPlay’s CORS allowed origins. HTTPS pages need a browser-compatible connection to the server.</p>
+          <p class="integration-description">Allow <code id="plugin-gateway-origin"></code> in TorrPlay’s CORS allowed origins. For an HTTP server on your LAN, choose Local network and allow browser local-network access. Browsers without this support need HTTPS.</p>
           <div class="plugin-form-actions">
             <button type="button" class="nav-btn" id="btn-plugin-test">Test connection</button>
             <button type="button" class="nav-btn" id="btn-plugin-token" hidden>Save &amp; get token</button>

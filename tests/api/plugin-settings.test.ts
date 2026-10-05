@@ -75,6 +75,7 @@ interface TestInstance {
   enabled: boolean;
   id: string;
   name: string;
+  options: Record<string, string>;
 }
 
 interface TestPluginManager {
@@ -212,9 +213,22 @@ describe('Plugin settings and result actions', () => {
     await addInstance(environment, '<Example server>', 'https://play.example');
     assert.equal(environment.manager.getInstances()[0].name, '<Example server>');
     assert.equal(environment.element('plugin-instance-list').children[0].children[0].textContent, '<Example server> · https://play.example');
-    assert.equal(environment.element('plugin-instance-options').querySelectorAll('[data-option-id]')[0].value, 'memory');
+    assert.equal(environment.element('plugin-instance-options').querySelectorAll('[data-option-id]').find(select => select.dataset.optionId === 'storage')?.value, 'memory');
     assert.equal(environment.refreshCount(), 2);
     assert.ok(environment.storage.get('torrgate_client_plugins'));
+  });
+
+  it('saves the configured local-network location through the form', async () => {
+    const environment = createSettingsEnvironment();
+    const select = environment.element('plugin-instance-options').querySelectorAll('[data-option-id]').find(input => input.dataset.optionId === 'addressSpace');
+    assert.ok(select);
+    assert.equal(select.value, 'auto');
+    select.value = 'local';
+    await addInstance(environment, 'Home', 'http://internal.example:8090');
+    const instance = environment.manager.getInstances()[0];
+    assert.equal(instance.options.addressSpace, 'local');
+    await environment.element('plugin-instance-list').children[0].children[1].dispatch('click');
+    assert.equal(environment.element('plugin-instance-options').querySelectorAll('[data-option-id]').find(input => input.dataset.optionId === 'addressSpace')?.value, 'local');
   });
 
   it('saves and tests instances on an HTTP gateway without randomUUID', async () => {

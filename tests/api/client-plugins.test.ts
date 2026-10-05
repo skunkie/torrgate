@@ -27,6 +27,10 @@ interface Item {
   Title: string;
 }
 
+interface PluginRequestInit extends RequestInit {
+  targetAddressSpace?: 'local' | 'loopback';
+}
+
 interface PluginManager {
   authorize(id: string): Promise<void>;
   createInstanceId(): string;
@@ -62,7 +66,7 @@ function sampleInstance(overrides: Partial<Instance> = {}): Instance {
 }
 
 function createPluginEnvironment(options: {
-  fetch?: (url: string, init: RequestInit) => Promise<Response>;
+  fetch?: (url: string, init: PluginRequestInit) => Promise<Response>;
   isCoordinationUnavailable?: boolean;
   isStorageUnavailable?: boolean;
   now?: () => number;
@@ -71,7 +75,7 @@ function createPluginEnvironment(options: {
   storage?: Map<string, string>;
 } = {}) {
   const storage = options.storage ?? new Map<string, string>();
-  const requests: { init: RequestInit; url: string }[] = [];
+  const requests: { init: PluginRequestInit; url: string }[] = [];
   let storageListener: ((event: { key: string | null }) => void) | undefined;
   const timeouts: number[] = [];
   const window = {
@@ -79,7 +83,7 @@ function createPluginEnvironment(options: {
     location: { origin: 'https://gate.example' },
     torrGatePlugins: undefined as PluginManager | undefined,
   };
-  const testFetch = async (url: string, init: RequestInit): Promise<Response> => {
+  const testFetch = async (url: string, init: PluginRequestInit): Promise<Response> => {
     requests.push({ init, url });
     if (options.fetch) return options.fetch(url, init);
     if (url.endsWith('/oauth/token')) return Response.json({ access_token: 'sample-access-token', expires_in: 3600, token_type: 'Bearer' });
@@ -167,6 +171,42 @@ describe('Client plugins and TorrPlay adapter', () => {
     assert.equal(requests[0].init.credentials, 'omit');
     assert.equal(requests[0].init.redirect, 'error');
     assert.ok(requests[0].init.signal);
+  });
+
+  for (const addressSpace of ['local', 'loopback'] as const) {
+    it('declares ' + addressSpace + ' for token acquisition, connection tests, and torrent additions', async () => {
+      const { manager, requests, storage } = createPluginEnvironment();
+      const instance = sampleInstance({
+        authType: 'bearer',
+        baseUrl: addressSpace === 'local' ? 'http://internal.example:8090' : 'http://localhost:8090',
+        options: { addressSpace, storage: 'file' },
+        username: 'sample-user',
+      });
+      await enableInstance(manager, instance, 'sample-password');
+      await manager.test(instance);
+      await manager.send('home', { MagnetUri: SAMPLE_MAGNET, Title: 'Example Release' }, async () => SAMPLE_MAGNET);
+      assert.equal(requests.length, 4);
+      assert.ok(requests.every(request => request.init.targetAddressSpace === addressSpace));
+      assert.equal(requests.filter(request => request.url.endsWith('/oauth/token')).length, 2);
+      assert.deepEqual(JSON.parse(String(requests[3].init.body)), { magnet: SAMPLE_MAGNET, storage: 'file', title: 'Example Release' });
+      const restored = createPluginEnvironment({ storage });
+      assert.equal(restored.manager.getInstances()[0].options.addressSpace, addressSpace);
+      await restored.manager.send('home', { MagnetUri: SAMPLE_MAGNET, Title: 'Example Release' }, async () => SAMPLE_MAGNET);
+      assert.equal(restored.requests[0].init.targetAddressSpace, addressSpace);
+    });
+  }
+
+  it('leaves network detection automatic for instances saved without a server location', async () => {
+    const { manager, requests } = createPluginEnvironment();
+    await enableInstance(manager);
+    assert.equal(manager.getInstances()[0].options.addressSpace, 'auto');
+    await manager.test(sampleInstance());
+    assert.equal(requests[0].init.targetAddressSpace, undefined);
+  });
+
+  it('suggests local-network permission or HTTPS when HTTP requests fail from an HTTPS page', async () => {
+    const { manager } = createPluginEnvironment({ fetch: async () => { throw new TypeError('Failed to fetch'); } });
+    await assert.rejects(manager.test(sampleInstance({ baseUrl: 'http://internal.example:8090', options: { addressSpace: 'local', storage: 'memory' } })), /Local network.*local-network access.*CORS.*HTTPS server URL/);
   });
 
   it('uses the shared magnet resolver for download-only results', async () => {

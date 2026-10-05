@@ -264,9 +264,11 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
           method: init && init.method || 'GET',
           redirect: 'error',
           signal: AbortSignal.timeout(init && init.timeoutMs || 15000),
+          targetAddressSpace: init && init.targetAddressSpace,
         });
       } catch (error) {
         if (error.name === 'TimeoutError' || error.name === 'AbortError') throw new Error('Connection to ' + instance.name + ' timed out');
+        if (new URL(window.location.origin).protocol === 'https:' && url.protocol === 'http:') throw new Error('Cannot reach ' + instance.name + ' over HTTP from this HTTPS page. For a LAN server, choose Local network in Server location and allow browser local-network access. Check CORS; browsers without local-network permission support need an HTTPS server URL');
         throw new Error('Cannot reach ' + instance.name + '. Check the URL, server CORS origins, and browser HTTPS or local network restrictions');
       }
       if (response.status === 409) return { status: 'exists' };
