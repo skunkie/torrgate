@@ -367,6 +367,33 @@ describe('Plugin settings and result actions', () => {
     assert.ok(environment.messages.some(message => message.includes('Authentication failed')));
   });
 
+  it('adds separate Bearer instances using Save & get token without replacing the first', async () => {
+    const environment = createSettingsEnvironment();
+    for (const name of ['Home', 'Second']) {
+      environment.element('plugin-instance-auth').value = 'bearer';
+      await environment.element('plugin-instance-auth').dispatch('change');
+      environment.element('plugin-instance-name').value = name;
+      environment.element('plugin-instance-url').value = 'https://' + name.toLowerCase() + '.example';
+      environment.element('plugin-instance-username').value = name.toLowerCase() + '-user';
+      environment.element('plugin-instance-secret').value = name.toLowerCase() + '-password';
+      await environment.element('btn-plugin-token').dispatch('click');
+    }
+    const instances = environment.manager.getInstances();
+    assert.equal(instances.length, 2);
+    assert.notEqual(instances[0].id, instances[1].id);
+    assert.equal(environment.element('plugin-instance-list').children.length, 2);
+    assert.equal(environment.element('plugin-form-title').textContent, 'Add instance');
+    assert.equal(environment.element('plugin-instance-name').value, '');
+    const stored = JSON.parse(environment.storage.get('torrgate_client_plugins') ?? '{}').instances;
+    assert.equal(stored.length, 2);
+    for (const name of ['Home', 'Second']) {
+      const instance = stored.find((entry: { name: string }) => entry.name === name);
+      assert.ok(instance);
+      assert.equal(instance.secret, name.toLowerCase() + '-password');
+      assert.equal(instance.accessToken, 'sample-access-token');
+    }
+  });
+
   it('saves Bearer account credentials and acquires a token through the form action', async () => {
     const environment = createSettingsEnvironment();
     environment.element('plugin-instance-auth').value = 'bearer';

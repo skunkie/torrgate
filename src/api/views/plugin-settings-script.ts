@@ -237,7 +237,7 @@ export const PLUGIN_SETTINGS_SCRIPT = String.raw`
             const isPersisted = await manager.upsertInstance(instance, element('plugin-instance-secret').value);
             editingId = instance.id;
             await manager.authorize(instance.id);
-            editInstance(manager.getInstances().find(entry => entry.id === instance.id));
+            resetForm();
             renderSettings();
             refreshActions();
             status.textContent = 'Token acquired. It will renew automatically before an API request when less than a minute remains.';
