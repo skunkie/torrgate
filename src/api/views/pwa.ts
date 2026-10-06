@@ -255,7 +255,7 @@ export function getIconSvg(): string {
  */
 export function getManifest(): string {
   const manifest = {
-    background_color: '#0f0f0f',
+    background_color: '#141414',
     description: 'Torrent Tracker Gateway & Search',
     display: 'standalone',
     icons: [
@@ -283,7 +283,7 @@ export function getManifest(): string {
     scope: '/',
     short_name: 'TorrGate',
     start_url: '/',
-    theme_color: '#0f0f0f',
+    theme_color: '#141414',
   };
 
   return JSON.stringify(manifest, null, 2);

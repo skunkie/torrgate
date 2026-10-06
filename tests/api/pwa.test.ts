@@ -146,8 +146,8 @@ describe('PWA & Mobile Installability Endpoints', () => {
     assert.equal(manifest.short_name, 'TorrGate');
     assert.equal(manifest.display, 'standalone');
     assert.equal(manifest.start_url, '/');
-    assert.equal(manifest.theme_color, '#0f0f0f');
-    assert.equal(manifest.background_color, '#0f0f0f');
+    assert.equal(manifest.theme_color, '#141414');
+    assert.equal(manifest.background_color, '#141414');
     assert.ok(Array.isArray(manifest.icons));
     assert.ok(manifest.icons.some(icon => icon.src === getIconUrl('/icon.svg')));
     assert.ok(manifest.icons.some(icon => icon.src === getIconUrl('/icon-192.png')));
@@ -303,7 +303,7 @@ describe('PWA & Mobile Installability Endpoints', () => {
     const html = await res.text();
     assert.ok(html.includes('<link rel="manifest" href="/manifest.webmanifest">'));
     assert.ok(html.includes(getIconLinkTags()));
-    assert.ok(html.includes('<meta name="theme-color" id="theme-color" content="#0f0f0f">'));
+    assert.ok(html.includes('<meta name="theme-color" id="theme-color" content="#141414">'));
     assert.ok(html.includes('<meta name="apple-mobile-web-app-capable" content="yes">'));
     assert.ok(html.includes('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'));
     assert.ok(html.includes('<meta name="apple-mobile-web-app-title" content="TorrGate">'));

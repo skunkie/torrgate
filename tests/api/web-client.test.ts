@@ -6,10 +6,80 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { after, before, describe, it } from 'node:test';
 
+import { JSDOM } from 'jsdom';
+
+import { FORM_STYLES } from '../../src/api/views/form-styles.js';
 import { THEME_SCRIPT } from '../../src/api/views/theme-script.js';
+import { THEME_STYLES } from '../../src/api/views/theme-styles.js';
+import { renderWebClientPage } from '../../src/api/views/web-client.js';
+import { WEB_CLIENT_SCRIPT } from '../../src/api/views/web-client-script.js';
 import { HttpClient } from '../../src/http/http-client.js';
 import { createApp } from '../../src/index.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
+
+describe('Web client interaction states', () => {
+  it('should keep primary button text readable in both themes and hover states', () => {
+    const dom = new JSDOM(`<style>${THEME_STYLES}</style>`);
+    const rules = Array.from(dom.window.document.styleSheets[0].cssRules);
+    const dark = rules.find(rule => rule instanceof dom.window.CSSStyleRule && rule.selectorText === ':root') as CSSStyleRule;
+    const light = rules.find(rule => rule instanceof dom.window.CSSStyleRule && rule.selectorText === ":root[data-theme='light']") as CSSStyleRule;
+    function luminance(color: string): number {
+      const channels = color.match(/[a-f\d]{2}/gi)?.map(channel => Number.parseInt(channel, 16) / 255)
+        .map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+      assert.ok(channels && channels.length === 3);
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    }
+    for (const theme of [dark, light]) {
+      const foreground = luminance(theme.style.getPropertyValue('--accent-text'));
+      for (const property of ['--accent', '--accent-hover']) {
+        const background = luminance(theme.style.getPropertyValue(property));
+        const contrast = (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+        assert.ok(contrast >= 4.5, `${theme.selectorText} ${property}: ${contrast}`);
+      }
+    }
+    dom.window.close();
+  });
+
+  it('should announce the selected category and render search, empty, and error states', async () => {
+    const dom = new JSDOM(renderWebClientPage({ hasAuth: false }), {
+      runScripts: 'outside-only',
+      url: 'https://gateway.example.test',
+    });
+    let searchResponse: Response = Response.json({ Indexers: [], Results: [] });
+    Object.assign(dom.window, {
+      fetch: async (url: string) => url === '/api/v2.0/indexers'
+        ? Response.json([{ id: 'sample', name: 'Sample Tracker', type: 'public' }])
+        : searchResponse,
+      matchMedia: () => ({ matches: false }),
+      torrGatePluginUi: { initialize: () => {}, renderActions: () => '' },
+    });
+    dom.window.eval(WEB_CLIENT_SCRIPT);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    const document = dom.window.document;
+    const category = document.querySelector<HTMLButtonElement>('[data-category="7000"]');
+    assert.ok(category);
+    category.click();
+    assert.equal(category.getAttribute('aria-pressed'), 'true');
+    assert.equal(document.querySelectorAll('.pill[aria-pressed="true"]').length, 1);
+    const form = document.querySelector<HTMLFormElement>('#search-form');
+    assert.ok(form);
+    form.dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+    assert.equal(document.querySelectorAll('.skeleton-card').length, 4);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(document.querySelector('#results-stats')?.textContent?.startsWith('0 releases'), true);
+    assert.match(document.querySelector('#results-list')?.textContent || '', /No releases found/);
+    searchResponse = Response.json({ message: 'Sample tracker unavailable' }, { status: 502 });
+    form.dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.match(document.querySelector('#results-list')?.textContent || '', /Search failed.*Sample tracker unavailable/);
+    document.querySelector<HTMLButtonElement>('#btn-open-trackers')?.click();
+    document.querySelector<HTMLButtonElement>('#btn-open-integration')?.click();
+    assert.equal(document.querySelector('.modal-overlay.foreground')?.id, 'modal-integration');
+    document.querySelector<HTMLButtonElement>('[data-close="modal-integration"]')?.click();
+    assert.equal(document.querySelector('.modal-overlay.foreground')?.id, 'modal-trackers');
+    dom.window.close();
+  });
+});
 
 describe('TorrGate Web Client & Authentication', () => {
   describe('Public Mode (no apiKey)', () => {
@@ -59,7 +129,7 @@ describe('TorrGate Web Client & Authentication', () => {
       assert.match(html, /id="modal-plugins"/);
       assert.match(html, /id="plugin-instance-form"/);
       assert.match(html, /id="modal-plugin-targets"/);
-      assert.match(html, /<meta name="theme-color" id="theme-color" content="#0f0f0f">/);
+      assert.match(html, /<meta name="theme-color" id="theme-color" content="#141414">/);
       assert.match(html, /<script src="\/theme\.js"><\/script>/);
       assert.match(html, /<link rel="stylesheet" href="\/web-client\.css">/);
       assert.match(html, /<script src="\/web-client\.js" defer><\/script>/);
@@ -106,14 +176,12 @@ describe('TorrGate Web Client & Authentication', () => {
       const styleText = await styles.text();
       assert.match(styleText, /--section-gap: 24px;/);
       assert.match(styleText, /--font-sans: Inter, ui-sans-serif, system-ui/);
-      assert.match(styleText, /--button-bg: #ffffff;/);
-      assert.match(styleText, /:root\[data-theme='light'\] \{[\s\S]*?--bg: #f4f4f5;/);
-      assert.match(styleText, /:root\[data-theme='light'\] \{[\s\S]*?--button-bg: #18181b;/);
+      assert.match(styleText, /--accent-text: #041b15;/);
+      assert.match(styleText, /:root\[data-theme='light'\] \{[\s\S]*?--surface: #ffffff;/);
+      assert.match(styleText, /:root\[data-theme='light'\] \{[\s\S]*?--accent-text: #ffffff;/);
       assert.match(styleText, /\.brand-logo \{[\s\S]*?color: var\(--accent\);/);
-      assert.match(styleText, /\.btn-search \{[\s\S]*?background: var\(--button-bg\);/);
-      assert.match(styleText, /\.nav-btn span:not\(#theme-toggle-icon\) \{[\s\S]*?display: none;/);
-      assert.match(styleText, /@media \(max-width: 480px\) \{[\s\S]*?\.header-inner \{[\s\S]*?flex-wrap: wrap;/);
-      assert.match(styleText, /@media \(max-width: 480px\) \{[\s\S]*?\.header-right \{[\s\S]*?flex-wrap: wrap;/);
+      assert.ok(styleText.includes(FORM_STYLES));
+      assert.match(styleText, /\.header-right \.nav-btn span:not\(#theme-toggle-icon\) \{[\s\S]*?display: none;/);
 
       const script = await fetch(`${baseUrl}/web-client.js`);
       assert.equal(script.status, 200);
@@ -124,26 +192,34 @@ describe('TorrGate Web Client & Authentication', () => {
       assert.ok(!scriptText.includes('onclick='));
     });
 
-    it('GET / should render the navbar with the shared section card styling', async () => {
-      const css = await (await fetch(`${baseUrl}/web-client.css`)).text();
-      assert.match(css, /\.header-inner \{[\s\S]*?background: var\(--surface\);/);
-      assert.match(css, /\.header-inner \{[\s\S]*?border: 1px solid var\(--border\);/);
-      assert.match(css, /\.header-inner \{[\s\S]*?border-radius: var\(--card-radius\);/);
-      assert.match(css, /--card-shadow: rgba\(0, 0, 0, 0\.35\);/);
-      assert.match(css, /\.header-inner \{[\s\S]*?box-shadow: 0 8px 24px var\(--card-shadow\);/);
+    it('GET / should label search controls and icon navigation', async () => {
+      const dom = new JSDOM(await (await fetch(`${baseUrl}/`)).text());
+      const document = dom.window.document;
+      for (const id of ['query-input', 'indexer-select', 'sort-select']) {
+        assert.ok(document.querySelector(`label[for="${id}"]`)?.textContent?.trim(), id);
+      }
+      for (const control of document.querySelectorAll('.header-right .nav-btn')) {
+        assert.ok(control.getAttribute('aria-label'), control.id);
+      }
+      assert.equal(document.querySelector('.workspace-title')?.textContent, 'Search releases');
+      assert.equal(document.querySelector('#category-pills .active')?.getAttribute('aria-pressed'), 'true');
+      dom.window.close();
     });
 
-    it('GET / should use one shared vertical gap between the main sections', async () => {
+    it('GET / should keep sticky navigation and categories in separate scrolling rows', async () => {
       const css = await (await fetch(`${baseUrl}/web-client.css`)).text();
-      assert.match(css, /--section-gap: 24px;/);
-      assert.match(css, /header \{[\s\S]*?height: calc\(var\(--header-height\) \+ var\(--section-gap\)\);/);
-      assert.match(css, /header \{[\s\S]*?padding: var\(--section-gap\) 20px 0;/);
-      assert.match(css, /main \{[\s\S]*?padding: var\(--section-gap\) 20px 48px;/);
-      assert.match(css, /\.indexer-warnings \{[\s\S]*?margin: 0 0 var\(--section-gap\);/);
-      assert.match(css, /\.search-panel \{[\s\S]*?margin-bottom: var\(--section-gap\);/);
-      assert.match(css, /\.results-bar \{[\s\S]*?margin-bottom: var\(--section-gap\);/);
-      assert.match(css, /--section-gap: 16px;/);
-      assert.match(css, /padding: var\(--section-gap\) 12px 36px;/);
+      const dom = new JSDOM(`<style>${css}</style>`);
+      const rules = Array.from(dom.window.document.styleSheets[0].cssRules);
+      for (const selector of ['.header-right', '.filter-pills']) {
+        const rule = rules.find(rule => rule instanceof dom.window.CSSStyleRule && rule.selectorText === selector) as CSSStyleRule;
+        assert.equal(rule.style.getPropertyValue('flex-wrap'), 'nowrap', selector);
+        assert.equal(rule.style.getPropertyValue('overflow-x'), 'auto', selector);
+      }
+      const header = rules.find(rule => rule instanceof dom.window.CSSStyleRule && rule.selectorText === 'header') as CSSStyleRule;
+      assert.equal(header.style.getPropertyValue('position'), 'sticky');
+      assert.equal(header.style.getPropertyValue('top'), '0');
+      assert.equal(header.style.getPropertyValue('background'), 'var(--surface)');
+      dom.window.close();
     });
 
     it('GET /login should redirect to / in public mode', async () => {
@@ -205,7 +281,7 @@ describe('TorrGate Web Client & Authentication', () => {
       assert.match(html, /action="\/login"/);
       assert.match(html, /id="apiKey"/);
       assert.match(html, /id="theme-toggle"/);
-      assert.match(html, /<meta name="theme-color" id="theme-color" content="#0f0f0f">/);
+      assert.match(html, /<meta name="theme-color" id="theme-color" content="#141414">/);
       assert.match(html, /<script src="\/theme\.js"><\/script>/);
       assert.match(html, /<link rel="stylesheet" href="\/login\.css">/);
       assert.ok(!html.includes('<style>'));
@@ -218,14 +294,16 @@ describe('TorrGate Web Client & Authentication', () => {
       assert.match(res.headers.get('content-type') || '', /text\/css/);
       assert.equal(res.headers.get('cache-control'), 'no-cache');
       const css = await res.text();
-      assert.match(css, /\.card \{/);
-      assert.match(css, /--button-bg: #ffffff;/);
-      assert.match(css, /--button-bg: #18181b;/);
-      assert.match(css, /:root\[data-theme='light'\] \{[\s\S]*?--button-bg: #18181b;/);
-      assert.match(css, /button\[type=submit\] \{[\s\S]*?background: var\(--button-bg\);/);
-      assert.match(css, /\.card \{[\s\S]*?border-radius: var\(--card-radius\);/);
-      assert.match(css, /\.theme-toggle \{[\s\S]*?background: var\(--surface\);[\s\S]*?border-radius: 8px;/);
-      assert.match(css, /\.theme-toggle:hover \{[\s\S]*?background: var\(--surface-elevated\);/);
+      assert.ok(css.includes(FORM_STYLES));
+      assert.match(css, /--accent-text: #041b15;/);
+      assert.match(css, /--accent-text: #ffffff;/);
+      assert.match(css, /:root\[data-theme='light'\] \{[\s\S]*?--accent-text: #ffffff;/);
+      assert.match(css, /\.form-button\.primary \{[\s\S]*?background: var\(--accent\);/);
+      const dom = new JSDOM(await (await fetch(`${baseUrl}/login`)).text());
+      assert.equal(dom.window.document.querySelector('h1')?.textContent, 'Sign in');
+      assert.equal(dom.window.document.querySelector('#apiKey')?.getAttribute('aria-describedby'), 'api-key-help');
+      assert.ok(dom.window.document.querySelector('.login-form .form-section'));
+      dom.window.close();
     });
 
     it('GET /theme.js should serve the shared theme behavior', async () => {

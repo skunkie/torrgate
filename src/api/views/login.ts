@@ -33,30 +33,37 @@ export function renderLoginPage(options?: RenderLoginOptions): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in &middot; TorrGate</title>
 ${getIconLinkTags()}
-<meta name="theme-color" id="theme-color" content="#0f0f0f">
+<meta name="theme-color" id="theme-color" content="#141414">
 <script src="/theme.js"></script>
 <link rel="stylesheet" href="/login.css">
 </head>
 <body>
-<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">
-  <span id="theme-toggle-icon" aria-hidden="true">◐</span>
-  <span id="theme-toggle-label">Theme</span>
-</button>
-<div class="wrap">
-  <h1 class="brand">
-    ${getBrandLogoSvg()}
-    TorrGate
-  </h1>
+<header class="login-header">
+  <div class="header-inner">
+    <div class="brand">${getBrandLogoSvg()}<span>TorrGate</span></div>
+    <button type="button" class="nav-btn theme-toggle" id="theme-toggle" aria-label="Toggle color theme">
+      <span id="theme-toggle-icon" aria-hidden="true">◐</span>
+      <span id="theme-toggle-label">Theme</span>
+    </button>
+  </div>
+</header>
+<main class="wrap">
+  <h1>Sign in</h1>
+  <p class="form-caption">Enter your API key to access TorrGate.</p>
   ${errorHtml}
-  <form method="post" action="${action}" class="card">
+  <form method="post" action="${action}" class="login-form">
     <input type="hidden" name="returnUrl" value="${returnUrl}">
-    <div class="field">
-      <label for="apiKey">API Key</label>
-      <input type="password" id="apiKey" name="apiKey" autocomplete="current-password" autofocus required>
-    </div>
-    <button type="submit">Sign in</button>
+    <fieldset class="form-section">
+      <legend>Authentication</legend>
+      <div class="form-field">
+        <label for="apiKey">API key</label>
+        <input type="password" class="form-input" id="apiKey" name="apiKey" autocomplete="current-password" aria-describedby="api-key-help" autofocus required>
+      </div>
+      <p class="form-caption" id="api-key-help">Use the key configured for your gateway.</p>
+    </fieldset>
+    <div class="login-actions"><button type="submit" class="form-button primary">Sign in</button></div>
   </form>
-</div>
+</main>
 </body>
 </html>`;
 }

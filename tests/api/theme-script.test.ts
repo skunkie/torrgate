@@ -84,7 +84,7 @@ describe('Theme script', () => {
   it('applies the system theme and persists a manual selection', () => {
     const environment = createThemeEnvironment({ isDark: true });
 
-    assert.equal(environment.themeColor.attributes.get('content'), '#0f0f0f');
+    assert.equal(environment.themeColor.attributes.get('content'), '#141414');
     environment.runDomContentLoaded();
     assert.equal(environment.button.attributes.get('aria-label'), 'Use light theme');
     assert.equal(environment.icon.textContent, '☀');
@@ -93,7 +93,7 @@ describe('Theme script', () => {
     environment.button.listeners.get('click')?.();
     assert.equal(environment.documentElement.dataset.theme, 'light');
     assert.equal(environment.storage.get('torrgate_theme'), 'light');
-    assert.equal(environment.themeColor.attributes.get('content'), '#f4f4f5');
+    assert.equal(environment.themeColor.attributes.get('content'), '#ffffff');
     assert.equal(environment.button.attributes.get('aria-label'), 'Use dark theme');
     assert.equal(environment.icon.textContent, '☾');
     assert.equal(environment.label.textContent, 'Dark');
@@ -103,7 +103,7 @@ describe('Theme script', () => {
     const environment = createThemeEnvironment({ isDark: true, storedTheme: 'light' });
 
     assert.equal(environment.documentElement.dataset.theme, 'light');
-    assert.equal(environment.themeColor.attributes.get('content'), '#f4f4f5');
+    assert.equal(environment.themeColor.attributes.get('content'), '#ffffff');
     environment.runDomContentLoaded();
     assert.equal(environment.label.textContent, 'Dark');
   });
@@ -115,7 +115,7 @@ describe('Theme script', () => {
     environment.mediaQuery.matches = false;
     environment.runMediaQueryChange();
 
-    assert.equal(environment.themeColor.attributes.get('content'), '#f4f4f5');
+    assert.equal(environment.themeColor.attributes.get('content'), '#ffffff');
     assert.equal(environment.icon.textContent, '☾');
     assert.equal(environment.label.textContent, 'Dark');
   });

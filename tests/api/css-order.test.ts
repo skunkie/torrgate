@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import stylelint from 'stylelint';
 
+import { FORM_STYLES } from '../../src/api/views/form-styles.js';
 import { LOGIN_PAGE_STYLES } from '../../src/api/views/login-styles.js';
 import { THEME_STYLES } from '../../src/api/views/theme-styles.js';
 import { WEB_CLIENT_STYLES } from '../../src/api/views/web-client-styles.js';
@@ -17,7 +18,7 @@ describe('CSS declaration ordering', () => {
   const configFile = fileURLToPath(new URL('../../stylelint.config.mjs', import.meta.url));
 
   it('should keep stylesheets and embedded styles in RECESS order', async () => {
-    const snippets = [LOGIN_PAGE_STYLES, THEME_STYLES, WEB_CLIENT_STYLES];
+    const snippets = [FORM_STYLES, LOGIN_PAGE_STYLES, THEME_STYLES, WEB_CLIENT_STYLES];
     const sourceDirectory = new URL('../../src/api/', import.meta.url);
     const files = fs.readdirSync(sourceDirectory, { encoding: 'utf8', recursive: true });
     for (const file of files.filter(file => file.endsWith('.ts'))) {

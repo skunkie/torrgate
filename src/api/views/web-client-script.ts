@@ -62,8 +62,12 @@ export const WEB_CLIENT_SCRIPT = String.raw`
       categoryPills.addEventListener('click', function(e) {
         const pill = e.target.closest('.pill');
         if (!pill) return;
-        document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.pill').forEach(p => {
+          p.classList.remove('active');
+          p.setAttribute('aria-pressed', 'false');
+        });
         pill.classList.add('active');
+        pill.setAttribute('aria-pressed', 'true');
         activeCategory = pill.getAttribute('data-category') || '';
         if (queryInput.value.trim()) {
           performSearch();
@@ -312,18 +316,21 @@ export const WEB_CLIENT_SCRIPT = String.raw`
       });
 
       function openModal(modal) {
-        modal.classList.add('open');
+        document.querySelectorAll('.modal-overlay.foreground').forEach(overlay => overlay.classList.remove('foreground'));
+        modal.classList.add('open', 'foreground');
       }
 
       function closeModal(modal) {
-        modal.classList.remove('open');
+        modal.classList.remove('open', 'foreground');
+        const remaining = document.querySelectorAll('.modal-overlay.open');
+        if (remaining.length) remaining[remaining.length - 1].classList.add('foreground');
       }
 
       function showToast(message) {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = 'toast';
-        toast.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>' + escapeHtml(message) + '</span>';
+        toast.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>' + escapeHtml(message) + '</span>';
         container.appendChild(toast);
         setTimeout(() => {
           toast.classList.add('closing');
@@ -749,7 +756,7 @@ export const WEB_CLIENT_SCRIPT = String.raw`
 
         resultsBar.classList.remove('is-hidden');
         const elapsedText = elapsedMs !== undefined ? ' (' + elapsedMs + ' ms)' : '';
-        resultsStats.innerHTML = 'Found <strong>' + currentResults.length + '</strong> releases' + elapsedText;
+        resultsStats.textContent = currentResults.length + ' releases' + elapsedText;
 
         if (currentResults.length === 0) {
           resultsList.innerHTML =
@@ -784,7 +791,7 @@ export const WEB_CLIENT_SCRIPT = String.raw`
                 '<span class="meta-stat stat-size">' + formattedSize + '</span>' +
                 '<span class="meta-stat stat-seed">▲ ' + item.Seeders + '</span>' +
                 '<span class="meta-stat stat-leech">▼ ' + item.Peers + '</span>' +
-                (dateStr ? '<span class="meta-stat">📅 ' + escapeHtml(dateStr) + '</span>' : '') +
+                (dateStr ? '<span class="meta-stat">' + escapeHtml(dateStr) + '</span>' : '') +
               '</div>' +
             '</div>' +
             '<div class="torrent-actions">' +
@@ -834,7 +841,7 @@ export const WEB_CLIENT_SCRIPT = String.raw`
         resultsBar.classList.add('is-hidden');
         resultsList.innerHTML =
           '<div class="empty-state error">' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
             '<h3>Search failed</h3>' +
             '<p>' + escapeHtml(message) + '</p>' +
           '</div>';

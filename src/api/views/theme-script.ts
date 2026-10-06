@@ -23,7 +23,7 @@ export const THEME_SCRIPT = String.raw`
   function updateThemeColor() {
     const themeColor = document.getElementById('theme-color');
     if (themeColor) {
-      themeColor.setAttribute('content', getEffectiveTheme() === 'dark' ? '#0f0f0f' : '#f4f4f5');
+      themeColor.setAttribute('content', getEffectiveTheme() === 'dark' ? '#141414' : '#ffffff');
     }
   }
 

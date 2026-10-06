@@ -31,7 +31,7 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
   <meta name="description" content="Search across torrent trackers via unified Jackett and Torznab proxy">
   <link rel="manifest" href="/manifest.webmanifest">
   ${getIconLinkTags()}
-  <meta name="theme-color" id="theme-color" content="#0f0f0f">
+  <meta name="theme-color" id="theme-color" content="#141414">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -51,17 +51,17 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
         </div>
       </div>
       <div class="header-right">
-        <button type="button" class="nav-btn" id="btn-open-plugins" title="Configure client plugins">
+        <button type="button" class="nav-btn" id="btn-open-plugins" aria-label="Plugins" title="Configure client plugins">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3v5m8-5v5M6 8h12v4a6 6 0 0 1-12 0V8Zm6 10v3"></path></svg>
           <span>Plugins</span>
         </button>
-        <button class="nav-btn" id="btn-open-trackers" title="View Tracker Status">
+        <button class="nav-btn" id="btn-open-trackers" aria-label="Trackers" title="View Tracker Status">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
           </svg>
           <span>Trackers</span>
         </button>
-        <button class="nav-btn" id="btn-open-integration" title="Connect to Radarr, Sonarr or Prowlarr">
+        <button class="nav-btn" id="btn-open-integration" aria-label="Connect Apps" title="Connect to Radarr, Sonarr or Prowlarr">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="18" cy="5" r="3"></circle>
             <circle cx="6" cy="12" r="3"></circle>
@@ -75,7 +75,7 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
           <span id="theme-toggle-icon" aria-hidden="true">◐</span>
           <span id="theme-toggle-label">Theme</span>
         </button>
-        <button class="nav-btn btn-install is-hidden" id="btn-install-app" title="Install TorrGate App">
+        <button class="nav-btn btn-install is-hidden" id="btn-install-app" aria-label="Install TorrGate App" title="Install TorrGate App">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
@@ -83,14 +83,14 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
           </svg>
           <span>Install</span>
         </button>
-        <a href="/docs" class="nav-btn" title="Open API Documentation">
+        <a href="/docs" class="nav-btn" aria-label="API Docs" title="Open API Documentation">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           </svg>
           <span>API Docs</span>
         </a>
-        <button class="nav-btn" id="btn-open-shortcuts" title="Keyboard Shortcuts (?)">
+        <button class="nav-btn" id="btn-open-shortcuts" aria-label="Keyboard Shortcuts" title="Keyboard Shortcuts (?)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
@@ -100,7 +100,7 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
         </button>
         ${
           hasAuth
-            ? `<a href="/logout" class="nav-btn" title="Sign out of TorrGate">
+            ? `<a href="/logout" class="nav-btn" aria-label="Sign Out" title="Sign out of TorrGate">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                   <polyline points="16 17 21 12 16 7"></polyline>
@@ -117,53 +117,67 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
   <!-- Main Content Area -->
   <main>
     <div class="search-panel">
-      <form id="search-form" class="search-inputs">
-        <div class="search-bar-wrap">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          <input
-            type="search"
-            id="query-input"
-            name="query"
-            placeholder="Search releases, movies, shows, games across trackers..."
-            autocomplete="off"
-            autofocus
-          >
-          <span class="search-shortcut-hint"><kbd>/</kbd></span>
-        </div>
-        <select id="indexer-select" class="indexer-select" aria-label="Select tracker indexer">
-          <option value="all">All Trackers</option>
-        </select>
-        <button type="submit" class="btn-search" id="btn-submit-search">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          Search
-        </button>
+      <h1 class="workspace-title">Search releases</h1>
+      <p class="form-caption">Find releases across your enabled trackers.</p>
+      <form id="search-form">
+        <fieldset class="form-section search-section">
+          <legend>Search</legend>
+          <div class="search-inputs">
+            <div class="form-field search-query-field">
+              <label for="query-input">Release or keyword</label>
+              <div class="search-bar-wrap">
+                <input
+                  type="search"
+                  class="form-input"
+                  id="query-input"
+                  name="query"
+                  placeholder="Search releases…"
+                  autocomplete="off"
+                  autofocus
+                >
+                <span class="search-shortcut-hint"><kbd>/</kbd></span>
+              </div>
+            </div>
+            <div class="form-field">
+              <label for="indexer-select">Tracker</label>
+              <select id="indexer-select" class="form-input indexer-select">
+                <option value="all">All Trackers</option>
+              </select>
+            </div>
+            <button type="submit" class="form-button primary btn-search" id="btn-submit-search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              Search
+            </button>
+          </div>
+        </fieldset>
       </form>
 
       <!-- Category Filter Pills -->
-      <div class="filter-pills" id="category-pills">
-        <button type="button" class="pill active" data-category="">All Categories</button>
-        <button type="button" class="pill" data-category="2000">🎬 Movies</button>
-        <button type="button" class="pill" data-category="5000">📺 TV / Series</button>
-        <button type="button" class="pill" data-category="3000">🎵 Audio</button>
-        <button type="button" class="pill" data-category="4000">🎮 PC &amp; Games</button>
-        <button type="button" class="pill" data-category="7000">📚 Books</button>
-      </div>
+      <fieldset class="form-section category-section">
+        <legend>Category</legend>
+        <div class="filter-pills" id="category-pills">
+          <button type="button" class="pill active" data-category="" aria-pressed="true">All</button>
+          <button type="button" class="pill" data-category="2000" aria-pressed="false">Movies</button>
+          <button type="button" class="pill" data-category="5000" aria-pressed="false">TV / Series</button>
+          <button type="button" class="pill" data-category="3000" aria-pressed="false">Audio</button>
+          <button type="button" class="pill" data-category="4000" aria-pressed="false">PC &amp; Games</button>
+          <button type="button" class="pill" data-category="7000" aria-pressed="false">Books</button>
+        </div>
+      </fieldset>
     </div>
 
     <!-- Results Meta Bar -->
     <div class="results-bar is-hidden" id="results-bar">
-      <div class="results-stats" id="results-stats">
-        Found <strong>0</strong> results
+      <div>
+        <h2 class="workspace-title">Results</h2>
+        <div class="results-stats" id="results-stats" role="status">0 releases</div>
       </div>
       <div class="sort-wrap">
         <label for="sort-select">Sort by:</label>
-        <select id="sort-select" class="sort-select">
+        <select id="sort-select" class="form-input sort-select">
           <option value="seeders-desc">Seeders (High to Low)</option>
           <option value="date-desc">Date (Newest first)</option>
           <option value="size-desc">Size (Largest first)</option>
@@ -188,6 +202,7 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
         <p>Type a release title, series, or keyword above to query all aggregated torrent trackers simultaneously.</p>
       </div>
     </div>
+    <footer class="workspace-footer"><span>Search powered by your configured trackers</span><span><kbd>/</kbd> Focus search &middot; <kbd>?</kbd> Shortcuts</span></footer>
   </main>
 
   <!-- Trackers Modal -->

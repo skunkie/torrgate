@@ -62,7 +62,7 @@ describe('Security headers and parameter handling', () => {
     assert.match(css, /--accent: #10b981;/);
     assert.match(css, /:root\[data-theme='light'\] \{[\s\S]*?--surface: #ffffff;/);
     assert.match(css, /\.brand-logo \{[\s\S]*?color: var\(--accent\);/);
-    assert.match(css, /input\[type=password\]:focus \{[\s\S]*?border-color: var\(--accent\);/);
+    assert.match(css, /:where\(a, button, input, select, summary\):focus-visible \{[\s\S]*?outline: 2px solid var\(--accent\);/);
 
     const script = await fetch(`${baseUrl}/theme.js`);
     assert.equal(script.status, 200);

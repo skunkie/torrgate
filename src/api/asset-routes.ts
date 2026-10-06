@@ -6,6 +6,7 @@ import { Router } from 'express';
 
 import { getQueryString } from '../utils/query.js';
 import { CLIENT_PLUGINS_SCRIPT } from './views/client-plugins-script.js';
+import { FORM_STYLES } from './views/form-styles.js';
 import { LOGIN_PAGE_STYLES } from './views/login-styles.js';
 import { PLUGIN_SETTINGS_SCRIPT } from './views/plugin-settings-script.js';
 import {
@@ -64,7 +65,7 @@ export function createAssetRouter(): Router {
   router.get('/web-client.css', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Content-Type', 'text/css; charset=utf-8');
-    res.send(`${THEME_STYLES}${WEB_CLIENT_STYLES}`);
+    res.send(`${THEME_STYLES}${FORM_STYLES}${WEB_CLIENT_STYLES}`);
   });
 
   router.get('/web-client.js', (_req, res) => {
@@ -76,7 +77,7 @@ export function createAssetRouter(): Router {
   router.get('/login.css', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Content-Type', 'text/css; charset=utf-8');
-    res.send(`${THEME_STYLES}${LOGIN_PAGE_STYLES}`);
+    res.send(`${THEME_STYLES}${FORM_STYLES}${LOGIN_PAGE_STYLES}`);
   });
 
   router.get('/theme.js', (_req, res) => {
