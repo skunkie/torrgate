@@ -35,7 +35,7 @@ function readPixel(png: Buffer, x: number, y: number): [number, number, number, 
 }
 
 const ACCENT: [number, number, number, number] = [16, 185, 129, 255];
-const BACKGROUND: [number, number, number, number] = [15, 15, 15, 255];
+const BACKGROUND: [number, number, number, number] = [20, 20, 20, 255];
 
 describe('App icon rendering', () => {
   it('draws the peer-hub glyph in the SVG icon', () => {
@@ -204,7 +204,12 @@ describe('PWA & Mobile Installability Endpoints', () => {
       assert.equal(iconRes.status, 200);
       assert.match(iconRes.headers.get('content-type') || '', /image\/png/);
       assert.equal(iconRes.headers.get('cache-control'), 'public, max-age=31536000, immutable');
-      assert.deepEqual(Buffer.from(await iconRes.arrayBuffer()), generatePngIcon(size, true));
+      const png = Buffer.from(await iconRes.arrayBuffer());
+      assert.deepEqual(png, generatePngIcon(size, true));
+      const backgroundRgb = [1, 3, 5].map(offset => Number.parseInt(manifest.background_color.slice(offset, offset + 2), 16));
+      for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) {
+        assert.deepEqual(readPixel(png, x, y), [...backgroundRgb, 255]);
+      }
     }
   });
 

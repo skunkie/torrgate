@@ -37,10 +37,10 @@ function createChunk(type: string, data: Buffer): Buffer {
   return Buffer.concat([lenBuf, payload, crcBuf]);
 }
 
-const BACKGROUND_RGB = [15, 15, 15] as const;
+const BACKGROUND_RGB = [20, 20, 20] as const;
 const ACCENT_RGB = [16, 185, 129] as const;
 const ACCENT_HEX = '#10b981';
-const BACKGROUND_HEX = '#0f0f0f';
+const BACKGROUND_HEX = '#141414';
 
 /**
  * The glyph is drawn on a 24-unit grid, placed in a 320px box centred on the
@@ -261,7 +261,7 @@ export function getIconSvg(): string {
  */
 export function getManifest(): string {
   const manifest = {
-    background_color: '#141414',
+    background_color: BACKGROUND_HEX,
     description: 'Torrent Tracker Gateway & Search',
     display: 'standalone',
     icons: [
@@ -301,7 +301,7 @@ export function getManifest(): string {
     scope: '/',
     short_name: 'TorrGate',
     start_url: '/',
-    theme_color: '#141414',
+    theme_color: BACKGROUND_HEX,
   };
 
   return JSON.stringify(manifest, null, 2);
