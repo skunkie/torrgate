@@ -8,6 +8,7 @@ import { runInNewContext } from 'node:vm';
 
 import { CLIENT_PLUGINS_SCRIPT } from '../../src/api/views/client-plugins-script.js';
 import { PLUGIN_SETTINGS_SCRIPT } from '../../src/api/views/plugin-settings-script.js';
+import { QBITTORRENT_PLUGIN_SCRIPT } from '../../src/api/views/qbittorrent-plugin-script.js';
 import { TORRPLAY_PLUGIN_SCRIPT } from '../../src/api/views/torrplay-plugin-script.js';
 import { renderWebClientPage } from '../../src/api/views/web-client.js';
 import { browserStorageCoordinator } from '../fixtures/browser-storage.js';
@@ -15,6 +16,7 @@ import { browserStorageCoordinator } from '../fixtures/browser-storage.js';
 type TestListener = (this: TestElement, event: { preventDefault(): void }) => Promise<void> | void;
 
 class TestElement {
+  readonly attributes = new Map<string, string>();
   checked = false;
   readonly children: TestElement[] = [];
   className = '';
@@ -24,12 +26,15 @@ class TestElement {
   disabled = false;
   hidden = false;
   readonly listeners = new Map<string, TestListener>();
+  maxLength = 0;
   placeholder = '';
   required = false;
   reset = () => {};
   textContent = '';
   type = '';
   value = '';
+  get pattern() { return this.attributes.get('pattern') ?? ''; }
+  set pattern(value: string) { this.attributes.set('pattern', value); }
 
   constructor(readonly tagName: string) {}
 
@@ -57,6 +62,10 @@ class TestElement {
     this.children.length = 0;
     this.textContent = '';
     if (this.tagName === 'select') this.value = '';
+  }
+
+  removeAttribute(name: string) {
+    this.attributes.delete(name);
   }
 
   reportValidity() {
@@ -137,7 +146,7 @@ function createSettingsEnvironment(options: { fetch?: () => Promise<Response>; o
     torrGatePluginUi: undefined as TestPluginUi | undefined,
     torrGatePlugins: undefined as TestPluginManager | undefined,
   };
-  runInNewContext(CLIENT_PLUGINS_SCRIPT + TORRPLAY_PLUGIN_SCRIPT + PLUGIN_SETTINGS_SCRIPT, {
+  runInNewContext(CLIENT_PLUGINS_SCRIPT + TORRPLAY_PLUGIN_SCRIPT + QBITTORRENT_PLUGIN_SCRIPT + PLUGIN_SETTINGS_SCRIPT, {
     AbortSignal,
     TextEncoder,
     URL,
@@ -158,6 +167,8 @@ function createSettingsEnvironment(options: { fetch?: () => Promise<Response>; o
       requests.push({ init, url });
       if (options.fetch) return options.fetch();
       if (url.endsWith('/oauth/token')) return Response.json({ access_token: 'sample-access-token', expires_in: 3600, token_type: 'Bearer' });
+      if (url.endsWith('/app/version')) return new Response('v5.2.0');
+      if (url.endsWith('/torrents/add')) return new Response('Ok.');
       return Response.json(init.method === 'POST' ? { hash: '0123456789012345678901234567890123456789' } : { torrents: [] });
     },
     indexedDB: browserStorageCoordinator(storage),
@@ -210,12 +221,27 @@ describe('Plugin settings and result actions', () => {
     checkbox.checked = true;
     await checkbox.dispatch('change');
     assert.equal(environment.manager.getInstances().length, 0);
-    await addInstance(environment, '<Example server>', 'https://play.example');
-    assert.equal(environment.manager.getInstances()[0].name, '<Example server>');
-    assert.equal(environment.element('plugin-instance-list').children[0].children[0].textContent, '<Example server> · https://play.example');
+    await addInstance(environment, '<Example instance>', 'https://play.example');
+    assert.equal(environment.manager.getInstances()[0].name, '<Example instance>');
+    assert.equal(environment.element('plugin-instance-list').children[0].children[0].children[0].textContent, '<Example instance>');
+    assert.equal(environment.element('plugin-instance-list').children[0].children[0].children[1].textContent, 'TorrPlay · https://play.example');
     assert.equal(environment.element('plugin-instance-options').querySelectorAll('[data-option-id]').find(select => select.dataset.optionId === 'storage')?.value, 'memory');
     assert.equal(environment.refreshCount(), 2);
     assert.ok(environment.storage.get('torrgate_client_plugins'));
+  });
+
+  it('starts a fresh instance from Add instance while preserving the edited instance', async () => {
+    const environment = createSettingsEnvironment();
+    await addInstance(environment, 'Home', 'https://home.example');
+    await environment.element('plugin-instance-list').children[0].children[1].dispatch('click');
+    assert.equal(environment.element('btn-plugin-reset').textContent, 'Cancel edit');
+    await environment.element('btn-plugin-add').dispatch('click');
+    assert.equal(environment.element('plugin-form-title').textContent, 'Add instance');
+    assert.equal(environment.element('btn-plugin-reset').textContent, 'Clear form');
+    assert.equal(environment.element('plugin-instance-name').value, '');
+    await addInstance(environment, 'Second', 'https://second.example');
+    assert.equal(environment.manager.getInstances().length, 2);
+    assert.equal(environment.manager.getInstances()[0].name, 'Home');
   });
 
   it('saves the configured local-network location through the form', async () => {
@@ -231,7 +257,7 @@ describe('Plugin settings and result actions', () => {
     assert.equal(environment.element('plugin-instance-options').querySelectorAll('[data-option-id]').find(input => input.dataset.optionId === 'addressSpace')?.value, 'local');
   });
 
-  it('saves and tests instances on an HTTP gateway without randomUUID', async () => {
+  it('saves independent instances and tests their connections on an HTTP gateway', async () => {
     const environment = createSettingsEnvironment({ origin: 'http://gateway.example:3000' });
     await addInstance(environment, 'Home', 'http://play.example');
     await addInstance(environment, 'Second', 'http://second.example');
@@ -240,6 +266,7 @@ describe('Plugin settings and result actions', () => {
     await environment.element('plugin-instance-list').children[0].children[1].dispatch('click');
     await environment.element('btn-plugin-test').dispatch('click');
     assert.equal(environment.element('plugin-connection-status').textContent, 'Connection successful');
+    assert.equal(environment.element('plugin-connection-status').dataset.state, 'success');
   });
 
   it('renders actions only for enabled plugins and results with obtainable magnets', async () => {
@@ -317,7 +344,7 @@ describe('Plugin settings and result actions', () => {
     environment.dispatchStorage();
     assert.equal(environment.element('plugin-form-title').textContent, 'Add instance');
     assert.equal(environment.element('plugin-instance-name').value, '');
-    assert.match(environment.element('plugin-instance-list').textContent, /No instances configured/);
+    assert.match(environment.element('plugin-instance-list').textContent, /No saved instances yet/);
     assert.equal(environment.refreshCount(), 2);
   });
 
@@ -332,7 +359,18 @@ describe('Plugin settings and result actions', () => {
     assert.equal(environment.resolvedCount(), 0);
     assert.ok(environment.messages.includes('Connection successful'));
     assert.equal(environment.element('plugin-connection-status').textContent, 'Connection successful');
+    assert.equal(environment.element('plugin-connection-status').dataset.state, 'success');
     assert.equal(environment.element('plugin-gateway-origin').textContent, 'https://gate.example');
+  });
+
+  it('shows an error state when a connection test fails', async () => {
+    const environment = createSettingsEnvironment({ fetch: async () => new Response(null, { status: 503 }) });
+    environment.element('plugin-instance-name').value = 'Home';
+    environment.element('plugin-instance-url').value = 'https://home.example';
+    await environment.element('btn-plugin-test').dispatch('click');
+    assert.equal(environment.element('plugin-connection-status').dataset.state, 'error');
+    assert.match(environment.element('plugin-connection-status').textContent, /HTTP 503/);
+    assert.equal(environment.element('btn-plugin-test').disabled, false);
   });
 
   it('opens the selected instance for missing credentials and clears the secret input on save', async () => {
@@ -349,11 +387,11 @@ describe('Plugin settings and result actions', () => {
     assert.equal(environment.opened[0], environment.element('modal-plugins'));
     assert.equal(environment.closed[0], environment.element('modal-details'));
     assert.equal(environment.element('plugin-instance-auth').value, 'bearer');
-    environment.element('plugin-instance-secret').value = 'sample-token';
+    environment.element('plugin-instance-secret').value = 'sample-password';
     await environment.element('plugin-instance-form').dispatch('submit');
     assert.equal(environment.element('plugin-instance-secret').value, '');
     assert.equal(environment.manager.hasCredentials(environment.manager.getInstances()[0].id), true);
-    assert.equal(JSON.parse(environment.storage.get('torrgate_client_plugins') ?? '{}').instances[0].secret, 'sample-token');
+    assert.equal(JSON.parse(environment.storage.get('torrgate_client_plugins') ?? '{}').instances[0].secret, 'sample-password');
   });
 
   it('restores button state and reports failed sends', async () => {
@@ -413,5 +451,69 @@ describe('Plugin settings and result actions', () => {
     assert.match(environment.element('plugin-connection-status').textContent, /renew automatically/);
     assert.equal(environment.element('plugin-instance-secret').value, '');
     assert.equal(environment.element('btn-plugin-token').disabled, false);
+  });
+});
+
+describe('qBittorrent instance form', () => {
+  it('shows plugin-specific fields, API-key authentication, and connection help when switching plugins', async () => {
+    const environment = createSettingsEnvironment();
+    environment.element('plugin-instance-username').value = 'sample-user';
+    environment.element('plugin-instance-secret').value = 'sample-password';
+    environment.element('plugin-instance-plugin').value = 'qbittorrent';
+    await environment.element('plugin-instance-plugin').dispatch('change');
+    assert.equal(environment.element('plugin-instance-auth').value, 'api-key');
+    assert.equal(environment.element('plugin-username-field').hidden, true);
+    assert.equal(environment.element('plugin-instance-username').required, false);
+    assert.equal(environment.element('plugin-auth-method-field').hidden, true);
+    assert.equal(environment.element('plugin-secret-label').textContent, 'API key');
+    assert.equal(environment.element('plugin-instance-secret').placeholder, 'Enter API key');
+    assert.equal(environment.element('plugin-instance-secret').required, true);
+    assert.equal(environment.element('btn-plugin-token').hidden, true);
+    assert.equal(environment.element('plugin-instance-secret').value, '');
+    assert.equal(environment.element('plugin-instance-username').value, '');
+    assert.equal(environment.element('plugin-qbittorrent-help').hidden, false);
+    assert.equal(environment.element('plugin-torrplay-help').hidden, true);
+    const fields = environment.element('plugin-instance-options').querySelectorAll('[data-option-id]');
+    assert.deepEqual(fields.map(field => field.dataset.optionId), ['addressSpace', 'savepath', 'category', 'tags', 'shouldStart']);
+    assert.equal(fields[1].tagName, 'input');
+    assert.equal(fields[1].placeholder, 'Use instance default');
+    assert.equal(fields[4].value, 'true');
+    environment.element('plugin-instance-plugin').value = 'torrplay';
+    await environment.element('plugin-instance-plugin').dispatch('change');
+    assert.equal(environment.element('plugin-instance-auth').value, 'none');
+    assert.equal(environment.element('plugin-auth-method-field').hidden, false);
+    assert.equal(environment.element('plugin-instance-secret').required, false);
+    assert.equal(environment.element('plugin-torrplay-help').hidden, false);
+    assert.equal(environment.element('plugin-qbittorrent-help').hidden, true);
+  });
+
+  it('saves and edits qBittorrent options alongside a TorrPlay instance and renders separate actions', async () => {
+    const environment = createSettingsEnvironment();
+    await addInstance(environment, 'Player', 'https://play.example');
+    environment.element('plugin-instance-plugin').value = 'qbittorrent';
+    await environment.element('plugin-instance-plugin').dispatch('change');
+    environment.element('plugin-instance-secret').value = 'qbt_' + 'a'.repeat(28);
+    const fields = environment.element('plugin-instance-options').querySelectorAll('[data-option-id]');
+    fields.find(field => field.dataset.optionId === 'savepath')!.value = '/downloads/Пример';
+    fields.find(field => field.dataset.optionId === 'shouldStart')!.value = 'false';
+    await addInstance(environment, 'Downloads', 'https://qbit.example');
+    assert.equal(environment.manager.getInstances().length, 2);
+    const row = environment.element('plugin-instance-list').children[1];
+    assert.equal(row.children[0].children[1].textContent, 'qBittorrent · https://qbit.example');
+    await row.children[1].dispatch('click');
+    assert.equal(environment.element('plugin-instance-plugin').value, 'qbittorrent');
+    assert.equal(environment.element('plugin-instance-auth').value, 'api-key');
+    assert.equal(environment.element('plugin-instance-secret').required, false);
+    assert.equal(environment.element('plugin-instance-secret').placeholder, 'Leave blank to keep current API key');
+    const editedFields = environment.element('plugin-instance-options').querySelectorAll('[data-option-id]');
+    assert.equal(editedFields.find(field => field.dataset.optionId === 'savepath')?.value, '/downloads/Пример');
+    assert.equal(editedFields.find(field => field.dataset.optionId === 'shouldStart')?.value, 'false');
+    await environment.element('btn-plugin-test').dispatch('click');
+    assert.equal(environment.element('plugin-connection-status').textContent, 'Connection successful');
+    await environment.manager.setEnabled('torrplay', true);
+    await environment.manager.setEnabled('qbittorrent', true);
+    const actions = environment.ui.renderActions(SAMPLE_ITEM, 0);
+    assert.match(actions, /Send to TorrPlay/);
+    assert.match(actions, /Send to qBittorrent/);
   });
 });

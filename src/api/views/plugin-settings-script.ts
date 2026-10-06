@@ -25,27 +25,57 @@ export const PLUGIN_SETTINGS_SCRIPT = String.raw`
         const label = document.createElement('label');
         label.className = 'plugin-field';
         label.textContent = field.label;
-        const select = document.createElement('select');
+        const select = document.createElement(field.type === 'text' ? 'input' : 'select');
         select.className = 'copy-input';
         select.dataset.optionId = field.id;
-        for (const choice of field.choices) {
+        if (field.type === 'text') {
+          select.type = 'text';
+          select.maxLength = 1024;
+          select.placeholder = field.placeholder || '';
+        }
+        for (const choice of field.choices || []) {
           const option = document.createElement('option');
           option.value = choice.value;
           option.textContent = choice.label;
           select.appendChild(option);
         }
-        select.value = options && options[field.id] || field.defaultValue;
+        select.value = options?.[field.id] ?? field.defaultValue;
         label.appendChild(select);
         container.appendChild(label);
       }
     }
 
+    function renderAuthChoices(value) {
+      const plugin = manager.getPlugins().find(entry => entry.id === pluginSelect.value);
+      const choices = plugin.authTypes || [{ label: 'No authentication', value: 'none' }, { label: 'Basic', value: 'basic' }, { label: 'Bearer sign-in · automatic renewal', value: 'bearer' }];
+      authSelect.replaceChildren();
+      for (const choice of choices) {
+        const option = document.createElement('option');
+        option.value = choice.value;
+        option.textContent = choice.label;
+        authSelect.appendChild(option);
+      }
+      authSelect.value = choices.some(choice => choice.value === value) ? value : choices[0].value;
+      element('plugin-auth-method-field').hidden = choices.length === 1;
+      element('plugin-torrplay-help').hidden = plugin.id !== 'torrplay';
+      element('plugin-qbittorrent-help').hidden = plugin.id !== 'qbittorrent';
+      element('plugin-instance-url').placeholder = plugin.id === 'qbittorrent' ? 'https://qbit.example.com' : 'https://play.example.com';
+    }
+
     function renderAuth() {
       const needsUsername = authSelect.value === 'basic' || authSelect.value === 'bearer';
+      const isApiKey = authSelect.value === 'api-key';
+      const plugin = manager.getPlugins().find(entry => entry.id === pluginSelect.value);
+      const saved = manager.getInstances().find(instance => instance.id === editingId);
+      const hasSavedSecret = saved && saved.pluginId === pluginSelect.value && saved.authType === authSelect.value && manager.hasCredentials(saved.id);
       element('plugin-username-field').hidden = !needsUsername;
       element('plugin-secret-field').hidden = authSelect.value === 'none';
       element('plugin-instance-username').required = needsUsername;
-      element('plugin-secret-label').textContent = 'Password';
+      element('plugin-secret-label').textContent = isApiKey ? 'API key' : 'Password';
+      if (isApiKey && plugin.secretPattern) element('plugin-instance-secret').pattern = plugin.secretPattern;
+      else element('plugin-instance-secret').removeAttribute('pattern');
+      element('plugin-instance-secret').required = isApiKey && !hasSavedSecret;
+      element('plugin-instance-secret').placeholder = hasSavedSecret ? 'Leave blank to keep current ' + (isApiKey ? 'API key' : 'password') : 'Enter ' + (isApiKey ? 'API key' : 'password');
       element('btn-plugin-token').hidden = authSelect.value !== 'bearer';
     }
 
@@ -53,23 +83,24 @@ export const PLUGIN_SETTINGS_SCRIPT = String.raw`
       form.reset();
       editingId = null;
       element('plugin-form-title').textContent = 'Add instance';
-      element('plugin-instance-secret').placeholder = 'Saved in this browser';
+      element('btn-plugin-reset').textContent = 'Clear form';
       element('plugin-connection-status').textContent = '';
       renderOptions();
+      renderAuthChoices();
       renderAuth();
     }
 
     function editInstance(instance) {
       editingId = instance.id;
       element('plugin-form-title').textContent = 'Edit instance';
+      element('btn-plugin-reset').textContent = 'Cancel edit';
       pluginSelect.value = instance.pluginId;
       element('plugin-instance-name').value = instance.name;
       element('plugin-instance-url').value = instance.baseUrl;
       element('plugin-instance-enabled').checked = instance.enabled;
-      authSelect.value = instance.authType;
+      renderAuthChoices(instance.authType);
       element('plugin-instance-username').value = instance.username;
       element('plugin-instance-secret').value = '';
-      element('plugin-instance-secret').placeholder = manager.hasCredentials(instance.id) ? 'Leave blank to keep saved credentials' : 'Enter credentials to save in this browser';
       renderOptions(instance.options);
       renderAuth();
       element('plugin-instance-name').focus();
@@ -116,12 +147,19 @@ export const PLUGIN_SETTINGS_SCRIPT = String.raw`
       const list = element('plugin-instance-list');
       list.replaceChildren();
       const instances = manager.getInstances();
-      if (!instances.length) list.textContent = 'No instances configured. Add your first server below.';
+      if (!instances.length) list.textContent = 'No saved instances yet. Add an instance to get started.';
       for (const instance of instances) {
         const row = document.createElement('div');
         row.className = 'plugin-instance-row';
         const text = document.createElement('span');
-        text.textContent = instance.name + ' · ' + instance.baseUrl + (instance.enabled ? '' : ' · disabled');
+        text.className = 'plugin-instance-info';
+        const name = document.createElement('strong');
+        name.textContent = instance.name;
+        const url = document.createElement('small');
+        const plugin = manager.getPlugins().find(entry => entry.id === instance.pluginId);
+        url.textContent = plugin.name + ' · ' + instance.baseUrl + (instance.enabled ? '' : ' · disabled');
+        text.appendChild(name);
+        text.appendChild(url);
         row.appendChild(text);
         const edit = document.createElement('button');
         edit.type = 'button';
@@ -131,7 +169,7 @@ export const PLUGIN_SETTINGS_SCRIPT = String.raw`
         row.appendChild(edit);
         const remove = document.createElement('button');
         remove.type = 'button';
-        remove.className = 'nav-btn';
+        remove.className = 'nav-btn plugin-remove';
         remove.textContent = 'Remove';
         remove.addEventListener('click', async () => {
           showPersistence(await manager.removeInstance(instance.id), 'Instance removed');
@@ -221,16 +259,28 @@ export const PLUGIN_SETTINGS_SCRIPT = String.raw`
           refreshActions();
         });
         element('btn-open-plugins').addEventListener('click', () => openSettings());
-        pluginSelect.addEventListener('change', () => renderOptions());
+        pluginSelect.addEventListener('change', () => {
+          element('plugin-instance-username').value = '';
+          element('plugin-instance-secret').value = '';
+          element('plugin-connection-status').textContent = '';
+          renderOptions();
+          renderAuthChoices();
+          renderAuth();
+        });
         authSelect.addEventListener('change', () => {
           element('plugin-instance-secret').value = '';
           renderAuth();
         });
         element('btn-plugin-reset').addEventListener('click', resetForm);
+        element('btn-plugin-add').addEventListener('click', () => {
+          resetForm();
+          element('plugin-instance-name').focus();
+        });
         element('btn-plugin-token').addEventListener('click', async function() {
           if (!form.reportValidity()) return;
           this.disabled = true;
           const status = element('plugin-connection-status');
+          status.dataset.state = 'loading';
           status.textContent = 'Getting token…';
           try {
             const instance = readForm();
@@ -240,9 +290,11 @@ export const PLUGIN_SETTINGS_SCRIPT = String.raw`
             resetForm();
             renderSettings();
             refreshActions();
+            status.dataset.state = 'success';
             status.textContent = 'Token acquired. It will renew automatically before an API request when less than a minute remains.';
             showPersistence(isPersisted, 'Token acquired');
           } catch (error) {
+            status.dataset.state = 'error';
             status.textContent = error.message;
             host.showToast(error.message);
           } finally {
@@ -267,13 +319,16 @@ export const PLUGIN_SETTINGS_SCRIPT = String.raw`
           const label = this.textContent;
           this.textContent = 'Testing…';
           const status = element('plugin-connection-status');
+          status.dataset.state = 'loading';
           status.textContent = 'Testing connection…';
           try {
             const result = await manager.test(readForm(), element('plugin-instance-secret').value);
             if (result.status !== 'success') throw new Error('Connection test returned an unexpected response');
+            status.dataset.state = 'success';
             status.textContent = 'Connection successful';
             host.showToast('Connection successful');
           } catch (error) {
+            status.dataset.state = 'error';
             status.textContent = error.message;
             host.showToast(error.message);
           } finally {

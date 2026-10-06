@@ -16,6 +16,7 @@ import {
   getManifest,
   getServiceWorker,
 } from './views/pwa.js';
+import { QBITTORRENT_PLUGIN_SCRIPT } from './views/qbittorrent-plugin-script.js';
 import { THEME_SCRIPT } from './views/theme-script.js';
 import { THEME_STYLES } from './views/theme-styles.js';
 import { TORRPLAY_PLUGIN_SCRIPT } from './views/torrplay-plugin-script.js';
@@ -69,7 +70,7 @@ export function createAssetRouter(): Router {
   router.get('/web-client.js', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.send(`${CLIENT_PLUGINS_SCRIPT}${TORRPLAY_PLUGIN_SCRIPT}${PLUGIN_SETTINGS_SCRIPT}${WEB_CLIENT_SCRIPT}`);
+    res.send(`${CLIENT_PLUGINS_SCRIPT}${TORRPLAY_PLUGIN_SCRIPT}${QBITTORRENT_PLUGIN_SCRIPT}${PLUGIN_SETTINGS_SCRIPT}${WEB_CLIENT_SCRIPT}`);
   });
 
   router.get('/login.css', (_req, res) => {

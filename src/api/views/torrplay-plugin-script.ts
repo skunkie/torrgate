@@ -19,7 +19,7 @@ export const TORRPLAY_PLUGIN_SCRIPT = String.raw`
       choices: [{ label: 'Automatic', value: 'auto' }, { label: 'Local network', value: 'local' }, { label: 'This computer (localhost)', value: 'loopback' }],
       defaultValue: 'auto',
       id: 'addressSpace',
-      label: 'Server location',
+      label: 'Instance location',
     }, {
       choices: [{ label: 'Memory', value: 'memory' }, { label: 'File', value: 'file' }],
       defaultValue: 'memory',

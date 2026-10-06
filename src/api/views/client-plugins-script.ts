@@ -45,21 +45,28 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
       if (!plugin || typeof instance.id !== 'string' || !instance.id || typeof instance.name !== 'string' || !instance.name.trim()) {
         throw new Error('Choose a plugin and enter an instance name');
       }
-      if (!['none', 'basic', 'bearer'].includes(instance.authType)) throw new Error('Choose a supported authentication method');
-      const username = typeof instance.username === 'string' ? instance.username.trim() : '';
+      const authTypes = plugin.authTypes ? plugin.authTypes.map(choice => choice.value) : ['none', 'basic', 'bearer'];
+      if (!authTypes.includes(instance.authType)) throw new Error('Choose a supported authentication method');
+      const username = instance.authType !== 'api-key' && typeof instance.username === 'string' ? instance.username.trim() : '';
       if (instance.authType === 'basic' && (!username || username.includes(':'))) {
         throw new Error('Basic authentication needs a username without a colon');
       }
       if (instance.authType === 'bearer' && ((!username && !isRestoring) || typeof plugin.getToken !== 'function')) throw new Error('Bearer sign-in needs a username and a plugin that supports token acquisition');
+      const baseUrl = normalizeUrl(instance.baseUrl);
       const options = {};
       for (const field of plugin.fields) {
-        const value = instance.options && instance.options[field.id] || field.defaultValue;
-        if (!field.choices.some(choice => choice.value === value)) throw new Error('Invalid ' + field.label);
-        options[field.id] = value;
+        const value = instance.options?.[field.id] ?? field.defaultValue;
+        if (field.type === 'text') {
+          if (typeof value !== 'string' || value.length > 1024 || /[\r\n]/.test(value)) throw new Error('Invalid ' + field.label);
+          options[field.id] = value.trim();
+        } else {
+          if (!field.choices.some(choice => choice.value === value)) throw new Error('Invalid ' + field.label);
+          options[field.id] = value;
+        }
       }
       return {
         authType: instance.authType,
-        baseUrl: normalizeUrl(instance.baseUrl),
+        baseUrl,
         enabled: instance.enabled !== false,
         id: instance.id,
         name: instance.name.trim(),
@@ -100,7 +107,7 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
           const normalized = normalizeInstance(instance, true);
           if (instances.some(entry => entry.id === normalized.id)) continue;
           instances.push(normalized);
-          if (normalized.authType !== 'none' && normalized.username && typeof instance.secret === 'string' && instance.secret) nextCredentials.set(normalized.id, instance.secret);
+          if (normalized.authType !== 'none' && (normalized.username || normalized.authType === 'api-key') && typeof instance.secret === 'string' && instance.secret) nextCredentials.set(normalized.id, instance.secret);
           if (normalized.authType === 'bearer' && normalized.username && typeof instance.accessToken === 'string' && instance.accessToken && Number.isFinite(instance.expiresAtMs)) {
             nextTokens.set(normalized.id, { accessToken: instance.accessToken, expiresAtMs: instance.expiresAtMs });
           }
@@ -200,10 +207,17 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
     function setCredentials(id, secret) {
       return updateStorage(() => {
         const instance = findInstance(id);
+        if (secret) validateSecret(instance, secret);
         clearToken(id);
         if (secret && instance.authType !== 'none') credentials.set(id, secret);
         else credentials.delete(id);
       });
+    }
+
+    function validateSecret(instance, secret) {
+      if (instance.authType !== 'api-key') return;
+      const plugin = plugins.get(instance.pluginId);
+      if (typeof secret !== 'string' || !secret || /[\r\n]/.test(secret) || plugin.secretPattern && !new RegExp(plugin.secretPattern).test(secret)) throw new Error('Enter a valid API key for ' + instance.name);
     }
 
     function clearToken(id) {
@@ -236,6 +250,9 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
     }
 
     async function request(instance, path, init) {
+      synchronizeStorage();
+      const saved = settings.instances.find(entry => entry.id === instance.id);
+      if (saved && !hasSameAuthentication(saved, instance)) throw new Error('Instance settings changed; try again');
       const baseUrl = normalizeUrl(instance.baseUrl);
       const url = new URL(baseUrl + '/' + path.replace(/^\/+/, ''));
       if (url.origin !== new URL(baseUrl).origin || !url.pathname.startsWith(new URL(baseUrl + '/').pathname)) {
@@ -249,10 +266,13 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
         if (instance.authType === 'basic') {
           const bytes = new TextEncoder().encode(instance.username + ':' + secret);
           headers.Authorization = 'Basic ' + btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
-        } else {
+        } else if (instance.authType === 'bearer') {
           const token = await getAccessToken(instance);
           if (/[\r\n]/.test(token)) throw new Error('Invalid bearer token');
           headers.Authorization = 'Bearer ' + token;
+        } else if (instance.authType === 'api-key') {
+          validateSecret(instance, secret);
+          headers.Authorization = 'Bearer ' + secret;
         }
       }
       let response;
@@ -268,7 +288,7 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
         });
       } catch (error) {
         if (error.name === 'TimeoutError' || error.name === 'AbortError') throw new Error('Connection to ' + instance.name + ' timed out');
-        if (new URL(window.location.origin).protocol === 'https:' && url.protocol === 'http:') throw new Error('Cannot reach ' + instance.name + ' over HTTP from this HTTPS page. For a LAN server, choose Local network in Server location and allow browser local-network access. Check CORS; browsers without local-network permission support need an HTTPS server URL');
+        if (new URL(window.location.origin).protocol === 'https:' && url.protocol === 'http:') throw new Error('Cannot reach ' + instance.name + ' over HTTP from this HTTPS page. For a LAN instance, choose Local network in Instance location and allow browser local-network access. Check CORS; browsers without local-network permission support need an HTTPS instance URL');
         throw new Error('Cannot reach ' + instance.name + '. Check the URL, server CORS origins, and browser HTTPS or local network restrictions');
       }
       if (response.status === 409) return { status: 'exists' };
@@ -283,7 +303,7 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
         throw new Error('Authentication failed for ' + instance.name + '; check credentials in Plugins');
       }
       if (!response.ok) throw new Error(instance.name + ' returned HTTP ' + response.status);
-      const data = await response.json().catch(() => null);
+      const data = init && init.responseType === 'text' ? await response.text() : await response.json().catch(() => null);
       return { data, status: 'success' };
     }
 
@@ -327,7 +347,7 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
             const normalized = normalizeInstance(instance, true);
             if (!instances.some(entry => entry.id === normalized.id)) {
               instances.push(normalized);
-              if (normalized.authType !== 'none' && normalized.username && typeof instance.secret === 'string' && instance.secret) {
+              if (normalized.authType !== 'none' && (normalized.username || normalized.authType === 'api-key') && typeof instance.secret === 'string' && instance.secret) {
                 credentials.set(normalized.id, instance.secret);
               }
               if (normalized.authType === 'bearer' && normalized.username && typeof instance.accessToken === 'string' && instance.accessToken && Number.isFinite(instance.expiresAtMs)) {
@@ -383,7 +403,10 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
         // Draft credentials never replace a saved instance's credentials.
         const draftId = 'draft-' + createInstanceId();
         normalized.id = draftId;
-        if (secret) credentials.set(draftId, secret);
+        if (secret) {
+          validateSecret(normalized, secret);
+          credentials.set(draftId, secret);
+        }
         else {
           const previous = settings.instances.find(entry => entry.id === instance.id);
           if (previous && previous.baseUrl === normalized.baseUrl && previous.authType === normalized.authType && previous.username === normalized.username && previous.pluginId === normalized.pluginId && credentials.has(instance.id)) {
@@ -401,6 +424,8 @@ export const CLIENT_PLUGINS_SCRIPT = String.raw`
         return updateStorage(() => {
           const normalized = normalizeInstance(instance);
           const previous = settings.instances.find(entry => entry.id === normalized.id);
+          if (secret) validateSecret(normalized, secret);
+          if (normalized.authType === 'api-key' && !secret && (!hasSameAuthentication(previous, normalized) || !credentials.has(normalized.id))) throw new Error('Enter an API key for ' + normalized.name);
           if (previous && (previous.baseUrl !== normalized.baseUrl || previous.authType !== normalized.authType || previous.username !== normalized.username || previous.pluginId !== normalized.pluginId)) {
             credentials.delete(normalized.id);
             clearToken(normalized.id);

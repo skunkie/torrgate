@@ -609,25 +609,83 @@ export const WEB_CLIENT_STYLES = String.raw`
       border: 1px solid var(--border);
       border-radius: 6px;
     }
-    .plugin-form, .plugin-field {
+    .plugin-modal { max-width: 960px; }
+    .plugin-workspace {
+      display: grid;
+      grid-template-columns: minmax(240px, 0.7fr) minmax(0, 1.3fr);
+      gap: 28px;
+    }
+    .plugin-sidebar {
+      min-width: 0;
+      padding-right: 24px;
+      border-right: 1px solid var(--border);
+    }
+    .plugin-caption {
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+    .plugin-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+    .plugin-section-header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .plugin-form, .plugin-field, .plugin-section {
       display: grid;
       gap: 8px;
+      min-width: 0;
     }
     .plugin-form {
-      margin-top: 20px;
+      gap: 20px;
+      align-content: start;
     }
-    .plugin-field[hidden], .plugin-form-actions [hidden] {
-      display: none;
+    .plugin-form h3 { font-size: 16px; }
+    .plugin-section {
+      gap: 12px;
+      padding: 16px 0 0;
+      border: 0;
+      border-top: 1px solid var(--border);
     }
+    .plugin-section legend {
+      padding-right: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .plugin-field {
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .plugin-field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      min-width: 0;
+    }
+    .plugin-field[hidden], .plugin-form-actions [hidden] { display: none; }
     .plugin-field .copy-input {
       box-sizing: border-box;
       width: 100%;
       min-width: 0;
+      min-height: 40px;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text);
     }
+    #plugin-instance-url { font-family: 'JetBrains Mono', monospace; }
     .plugin-toggles, .plugin-instance-list {
       display: grid;
       gap: 12px;
-      margin: 16px 0;
+      margin: 16px 0 24px;
     }
     .plugin-toggle, .plugin-instance-row, .plugin-form-actions {
       display: flex;
@@ -635,10 +693,62 @@ export const WEB_CLIENT_STYLES = String.raw`
       gap: 8px;
       align-items: center;
     }
-    .plugin-instance-row span {
-      flex: 1;
+    .plugin-toggle { font-size: 12px; }
+    .plugin-toggle input { accent-color: var(--accent); }
+    .plugin-instance-row {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .plugin-instance-info {
+      display: grid;
+      flex: 1 1 100%;
+      gap: 5px;
       min-width: 0;
+      font-size: 13px;
       overflow-wrap: anywhere;
+    }
+    .plugin-instance-info small {
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .plugin-remove { color: var(--danger); }
+    .plugin-help {
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--text-muted);
+    }
+    .plugin-help summary { cursor: pointer; }
+    .plugin-help p { margin-top: 10px; overflow-wrap: anywhere; }
+    .plugin-status {
+      min-height: 20px;
+      font-size: 12px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+    .plugin-status:empty { display: none; }
+    .plugin-status[data-state='loading'] { color: var(--text-muted); }
+    .plugin-status[data-state='success'] { color: var(--accent); }
+    .plugin-status[data-state='error'] { color: var(--danger); }
+    .plugin-form-actions {
+      justify-content: flex-end;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .plugin-modal :is(button, input, select, summary):focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+    @media (max-width: 768px) {
+      .plugin-workspace { grid-template-columns: 1fr; gap: 24px; }
+      .plugin-sidebar { padding: 0 0 20px; border-right: 0; border-bottom: 1px solid var(--border); }
+    }
+    @media (max-width: 480px) {
+      .plugin-field-grid { grid-template-columns: 1fr; }
+      .plugin-form-actions .nav-btn { flex: 1 1 auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #modal-plugins, #modal-plugins .modal { transition: none; }
     }
     .table-responsive {
       width: 100%;

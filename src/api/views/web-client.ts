@@ -280,36 +280,49 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
   </div>
 
   <div class="modal-overlay" id="modal-plugins">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="plugins-title">
+    <div class="modal plugin-modal" role="dialog" aria-modal="true" aria-labelledby="plugins-title">
       <div class="modal-header">
-        <h2 class="modal-title" id="plugins-title">Client plugins</h2>
+        <div><h2 class="modal-title" id="plugins-title">Client plugins</h2><p class="plugin-caption">Send releases to your torrent clients.</p></div>
         <button type="button" class="modal-close" data-close="modal-plugins" aria-label="Close plugins">&times;</button>
       </div>
-      <div class="modal-body">
-        <p class="integration-description">Enable an integration and configure the servers you want to send releases to. Instance settings, passwords, and tokens are saved in this browser.</p>
-        <div id="plugin-toggles" class="plugin-toggles"></div>
-        <div id="plugin-instance-list" class="plugin-instance-list"></div>
+      <div class="modal-body plugin-workspace">
+        <aside class="plugin-sidebar" aria-label="Plugins and saved instances">
+          <h3 class="plugin-section-title">Plugins</h3>
+          <div id="plugin-toggles" class="plugin-toggles"></div>
+          <div class="plugin-section-header"><h3 class="plugin-section-title">Saved instances</h3><button type="button" class="nav-btn" id="btn-plugin-add">Add instance</button></div>
+          <div id="plugin-instance-list" class="plugin-instance-list"></div>
+        </aside>
         <form id="plugin-instance-form" class="plugin-form">
-          <h3 id="plugin-form-title">Add instance</h3>
-          <label class="plugin-field">Plugin<select id="plugin-instance-plugin" class="copy-input"></select></label>
-          <label class="plugin-field">Instance name<input id="plugin-instance-name" class="copy-input" required maxlength="100" placeholder="Living room"></label>
-          <label class="plugin-field">Base URL<input type="url" id="plugin-instance-url" class="copy-input" required placeholder="https://play.example.com"></label>
-          <label class="plugin-toggle"><input type="checkbox" id="plugin-instance-enabled" checked> Enable instance</label>
-          <label class="plugin-field">Authentication<select id="plugin-instance-auth" class="copy-input"><option value="none">None</option><option value="basic">Basic</option><option value="bearer">Bearer sign-in (automatic renewal)</option></select></label>
-          <label class="plugin-field" id="plugin-username-field" hidden>Username<input id="plugin-instance-username" class="copy-input" autocomplete="off"></label>
-          <label class="plugin-field" id="plugin-secret-field" hidden><span id="plugin-secret-label">Password</span><input type="password" id="plugin-instance-secret" class="copy-input" autocomplete="off"></label>
-          <div id="plugin-instance-options" class="plugin-form"></div>
-          <p class="integration-description">Allow <code id="plugin-gateway-origin"></code> in TorrPlay’s CORS allowed origins. For an HTTP server on your LAN, choose Local network and allow browser local-network access. Browsers without this support need HTTPS.</p>
+          <div class="plugin-section-header"><h3 id="plugin-form-title">Add instance</h3><label class="plugin-toggle"><input type="checkbox" id="plugin-instance-enabled" checked> Enabled</label></div>
+          <fieldset class="plugin-section">
+            <legend>Connection</legend>
+            <div class="plugin-field-grid">
+              <label class="plugin-field">Plugin<select id="plugin-instance-plugin" class="copy-input"></select></label>
+              <label class="plugin-field">Instance name<input id="plugin-instance-name" class="copy-input" required maxlength="100" placeholder="Living room"></label>
+            </div>
+            <label class="plugin-field">Instance URL<input type="url" id="plugin-instance-url" class="copy-input" required placeholder="https://play.example.com" aria-describedby="plugin-url-help"></label>
+            <p class="plugin-caption" id="plugin-url-help">Include the path if your instance runs behind a reverse proxy.</p>
+            <div id="plugin-instance-options" class="plugin-field-grid"></div>
+          </fieldset>
+          <fieldset class="plugin-section">
+            <legend>Authentication</legend>
+            <label class="plugin-field" id="plugin-auth-method-field">Sign-in method<select id="plugin-instance-auth" class="copy-input"><option value="none">No authentication</option><option value="basic">Basic</option><option value="bearer">Bearer sign-in · automatic renewal</option></select></label>
+            <div class="plugin-field-grid">
+              <label class="plugin-field" id="plugin-username-field" hidden>Username<input id="plugin-instance-username" class="copy-input" autocomplete="off"></label>
+              <label class="plugin-field" id="plugin-secret-field" hidden><span id="plugin-secret-label">Password</span><input type="password" id="plugin-instance-secret" class="copy-input" autocomplete="off"></label>
+            </div>
+          </fieldset>
+          <details class="plugin-help"><summary>Connection help</summary><p id="plugin-torrplay-help">Allow <code id="plugin-gateway-origin"></code> in TorrPlay’s CORS allowed origins. For an HTTP instance on your LAN, choose Local network and allow browser local-network access. Browsers without this support need HTTPS.</p><p id="plugin-qbittorrent-help" hidden>Generate an API key in qBittorrent Preferences → Web UI (5.2+). A cross-origin URL must permit the TorrGate origin, the Authorization header, and GET, POST, and OPTIONS requests. Use a reverse proxy if the endpoint cannot handle CORS preflight. You can also use a proxy path under TorrGate’s origin. For an HTTP instance on your LAN, choose Local network and allow browser local-network access; browsers without this support need HTTPS.</p></details>
+          <p id="plugin-connection-status" class="plugin-status" role="status" aria-live="polite"></p>
           <div class="plugin-form-actions">
+            <button type="button" class="nav-btn" id="btn-plugin-reset">Clear form</button>
             <button type="button" class="nav-btn" id="btn-plugin-test">Test connection</button>
             <button type="button" class="nav-btn" id="btn-plugin-token" hidden>Save &amp; get token</button>
-            <button type="submit" class="nav-btn primary">Save instance</button>
-            <button type="button" class="nav-btn" id="btn-plugin-reset">Cancel edit</button>
+            <button type="submit" class="nav-btn primary" id="btn-plugin-save">Save instance</button>
           </div>
-          <p id="plugin-connection-status" class="integration-description" role="status"></p>
         </form>
       </div>
-      <div class="modal-footer"><button type="button" class="nav-btn primary" data-close="modal-plugins">Done</button></div>
+      <div class="modal-footer"><button type="button" class="nav-btn" data-close="modal-plugins">Done</button></div>
     </div>
   </div>
 

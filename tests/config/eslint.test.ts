@@ -9,6 +9,7 @@ import { ESLint } from 'eslint';
 
 import { CLIENT_PLUGINS_SCRIPT } from '../../src/api/views/client-plugins-script.js';
 import { PLUGIN_SETTINGS_SCRIPT } from '../../src/api/views/plugin-settings-script.js';
+import { QBITTORRENT_PLUGIN_SCRIPT } from '../../src/api/views/qbittorrent-plugin-script.js';
 import { THEME_SCRIPT } from '../../src/api/views/theme-script.js';
 import { TORRPLAY_PLUGIN_SCRIPT } from '../../src/api/views/torrplay-plugin-script.js';
 import { WEB_CLIENT_SCRIPT } from '../../src/api/views/web-client-script.js';
@@ -20,7 +21,7 @@ describe('Property ordering rules', () => {
   const filePath = 'src/types/torrent.ts';
 
   it('should keep embedded browser script properties in alphabetical order', async () => {
-    for (const source of [CLIENT_PLUGINS_SCRIPT, PLUGIN_SETTINGS_SCRIPT, THEME_SCRIPT, TORRPLAY_PLUGIN_SCRIPT, WEB_CLIENT_SCRIPT]) {
+    for (const source of [CLIENT_PLUGINS_SCRIPT, PLUGIN_SETTINGS_SCRIPT, QBITTORRENT_PLUGIN_SCRIPT, THEME_SCRIPT, TORRPLAY_PLUGIN_SCRIPT, WEB_CLIENT_SCRIPT]) {
       const [result] = await eslint.lintText(source, { filePath });
       const orderingErrors = result.messages.filter(message =>
         message.fatal || message.ruleId === 'perfectionist/sort-objects'

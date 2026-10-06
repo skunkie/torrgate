@@ -7,6 +7,7 @@ import { describe, it } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
 import { CLIENT_PLUGINS_SCRIPT } from '../../src/api/views/client-plugins-script.js';
+import { QBITTORRENT_PLUGIN_SCRIPT } from '../../src/api/views/qbittorrent-plugin-script.js';
 import { TORRPLAY_PLUGIN_SCRIPT } from '../../src/api/views/torrplay-plugin-script.js';
 import { browserStorageCoordinator } from '../fixtures/browser-storage.js';
 
@@ -70,6 +71,7 @@ function createPluginEnvironment(options: {
   isCoordinationUnavailable?: boolean;
   isStorageUnavailable?: boolean;
   now?: () => number;
+  origin?: string;
   pluginScript?: string;
   readStorage?: () => void;
   storage?: Map<string, string>;
@@ -80,7 +82,7 @@ function createPluginEnvironment(options: {
   const timeouts: number[] = [];
   const window = {
     addEventListener: (_type: string, listener: (event: { key: string | null }) => void) => { storageListener = listener; },
-    location: { origin: 'https://gate.example' },
+    location: { origin: options.origin ?? 'https://gate.example' },
     torrGatePlugins: undefined as PluginManager | undefined,
   };
   const testFetch = async (url: string, init: PluginRequestInit): Promise<Response> => {
@@ -118,7 +120,7 @@ function createPluginEnvironment(options: {
 }
 
 async function enableInstance(manager: PluginManager, instance = sampleInstance(), secret?: string) {
-  await manager.setEnabled('torrplay', true);
+  await manager.setEnabled(instance.pluginId, true);
   await manager.upsertInstance(instance, secret);
 }
 
@@ -206,7 +208,7 @@ describe('Client plugins and TorrPlay adapter', () => {
 
   it('suggests local-network permission or HTTPS when HTTP requests fail from an HTTPS page', async () => {
     const { manager } = createPluginEnvironment({ fetch: async () => { throw new TypeError('Failed to fetch'); } });
-    await assert.rejects(manager.test(sampleInstance({ baseUrl: 'http://internal.example:8090', options: { addressSpace: 'local', storage: 'memory' } })), /Local network.*local-network access.*CORS.*HTTPS server URL/);
+    await assert.rejects(manager.test(sampleInstance({ baseUrl: 'http://internal.example:8090', options: { addressSpace: 'local', storage: 'memory' } })), /Local network.*local-network access.*CORS.*HTTPS instance URL/);
   });
 
   it('uses the shared magnet resolver for download-only results', async () => {
@@ -272,7 +274,7 @@ describe('Client plugins and TorrPlay adapter', () => {
   it('never reuses saved credentials when testing a different destination', async () => {
     const { manager, requests } = createPluginEnvironment();
     const instance = sampleInstance({ authType: 'basic', username: 'sample-user' });
-    await enableInstance(manager, instance, 'sample-token');
+    await enableInstance(manager, instance, 'sample-password');
     await assert.rejects(manager.test({ ...instance, baseUrl: 'https://other.example' }), /Enter and save credentials/);
     assert.equal(requests.length, 0);
     assert.equal(manager.hasCredentials('home'), true);
@@ -373,12 +375,19 @@ describe('Client plugins and TorrPlay adapter', () => {
     assert.equal(second.manager.getInstances().length, 2);
   });
 
-  it('generates independent IDs without the secure-context randomUUID API', async () => {
-    const { manager } = createPluginEnvironment();
+  it('creates unique instance IDs that persist on an HTTP gateway', async () => {
+    const { manager, storage } = createPluginEnvironment({ origin: 'http://gate.example' });
     const first = manager.createInstanceId();
-    assert.match(first, /^[a-f0-9]{32}$/);
-    assert.notEqual(first, manager.createInstanceId());
-    await manager.test(sampleInstance({ authType: 'bearer', username: 'sample-user' }), 'sample-password');
+    const second = manager.createInstanceId();
+    assert.equal(typeof first, 'string');
+    assert.ok(first.length > 0);
+    assert.equal(typeof second, 'string');
+    assert.ok(second.length > 0);
+    assert.notEqual(first, second);
+    await manager.upsertInstance(sampleInstance({ id: first }));
+    await manager.upsertInstance(sampleInstance({ id: second, name: 'Second' }));
+    const restored = createPluginEnvironment({ origin: 'http://gate.example', storage });
+    assert.deepEqual(Array.from(restored.manager.getInstances(), instance => instance.id), [first, second]);
   });
 
   it('preserves other tabs changes when saving an unrelated setting', async () => {
@@ -516,26 +525,28 @@ describe('Client plugins and TorrPlay adapter', () => {
     assert.equal(tokenCount, 2);
   });
 
-  it('requires account credentials when restoring a previous manually supplied token', async () => {
-    const stored = JSON.stringify({ enabledPlugins: ['torrplay'], instances: [{ ...sampleInstance({ authType: 'bearer' }), secret: 'old-manual-token' }], version: 1 });
+  it('requires a username before authenticating restored Bearer settings', async () => {
+    const stored = JSON.stringify({ enabledPlugins: ['torrplay'], instances: [{ ...sampleInstance({ authType: 'bearer' }), secret: 'sample-password' }], version: 1 });
     const environment = createPluginEnvironment({ storage: new Map([[STORAGE_KEY, stored]]) });
     assert.equal(environment.manager.getInstances().length, 1);
     assert.equal(environment.manager.hasCredentials('home'), false);
+    await assert.rejects(environment.manager.authorize('home'), /Enter a username and password/);
+    assert.equal(environment.requests.length, 0);
   });
 
   it('tests a draft without saving it or replacing saved credentials', async () => {
     const { manager, requests, storage } = createPluginEnvironment();
     const instance = sampleInstance({ authType: 'basic', username: 'sample-user' });
-    await enableInstance(manager, instance, 'saved-token');
-    await manager.test(instance, 'draft-token');
+    await enableInstance(manager, instance, 'saved-password');
+    await manager.test(instance, 'draft-password');
     await manager.test(instance);
-    assert.equal((requests[0].init.headers as Record<string, string>).Authorization, 'Basic ' + Buffer.from('sample-user:draft-token').toString('base64'));
-    assert.equal((requests[1].init.headers as Record<string, string>).Authorization, 'Basic ' + Buffer.from('sample-user:saved-token').toString('base64'));
+    assert.equal((requests[0].init.headers as Record<string, string>).Authorization, 'Basic ' + Buffer.from('sample-user:draft-password').toString('base64'));
+    assert.equal((requests[1].init.headers as Record<string, string>).Authorization, 'Basic ' + Buffer.from('sample-user:saved-password').toString('base64'));
     assert.equal(manager.getInstances().length, 1);
-    assert.ok(!storage.get(STORAGE_KEY)?.includes('draft-token'));
+    assert.ok(!storage.get(STORAGE_KEY)?.includes('draft-password'));
     const restored = createPluginEnvironment({ storage });
     await restored.manager.test(instance);
-    assert.equal((restored.requests[0].init.headers as Record<string, string>).Authorization, 'Basic ' + Buffer.from('sample-user:saved-token').toString('base64'));
+    assert.equal((restored.requests[0].init.headers as Record<string, string>).Authorization, 'Basic ' + Buffer.from('sample-user:saved-password').toString('base64'));
   });
 
   it('validates URLs, authentication and plugin settings before saving', async () => {
@@ -578,12 +589,12 @@ describe('Client plugins and TorrPlay adapter', () => {
 
   it('removes an instance and its credentials', async () => {
     const { manager, storage } = createPluginEnvironment();
-    await enableInstance(manager, sampleInstance({ authType: 'basic', username: 'sample-user' }), 'sample-token');
+    await enableInstance(manager, sampleInstance({ authType: 'basic', username: 'sample-user' }), 'sample-password');
     await manager.removeInstance('home');
     assert.equal(manager.getInstances().length, 0);
     assert.equal(manager.hasCredentials('home'), false);
     assert.equal(createPluginEnvironment({ storage }).manager.hasCredentials('home'), false);
-    assert.ok(!storage.get(STORAGE_KEY)?.includes('sample-token'));
+    assert.ok(!storage.get(STORAGE_KEY)?.includes('sample-password'));
   });
 
   it('persists credential updates and explicit clearing', async () => {
@@ -598,12 +609,12 @@ describe('Client plugins and TorrPlay adapter', () => {
   it('preserves credentials on ordinary edits and clears them when authentication is disabled', async () => {
     const { manager, storage } = createPluginEnvironment();
     const instance = sampleInstance({ authType: 'basic', username: 'sample-user' });
-    await enableInstance(manager, instance, 'sample-token');
+    await enableInstance(manager, instance, 'sample-password');
     await manager.upsertInstance({ ...instance, name: 'Renamed' });
     assert.equal(createPluginEnvironment({ storage }).manager.hasCredentials('home'), true);
     await manager.upsertInstance({ ...instance, authType: 'none' });
     assert.equal(createPluginEnvironment({ storage }).manager.hasCredentials('home'), false);
-    assert.ok(!storage.get(STORAGE_KEY)?.includes('sample-token'));
+    assert.ok(!storage.get(STORAGE_KEY)?.includes('sample-password'));
   });
 
   it('reports already-added torrents separately from successful additions', async () => {
@@ -661,5 +672,190 @@ describe('Client plugins and TorrPlay adapter', () => {
     await manager.setEnabled('torrplay', false);
     await assert.rejects(manager.send('home', item, async () => SAMPLE_MAGNET), /Enable/);
     assert.equal(requests.length, 0);
+  });
+});
+
+const SAMPLE_QBIT_API_KEY = 'qbt_' + 'a'.repeat(28);
+
+function qbittorrentInstance(overrides: Partial<Instance> = {}): Instance {
+  return sampleInstance({
+    authType: 'api-key',
+    baseUrl: 'https://qbit.example/proxy',
+    options: {},
+    pluginId: 'qbittorrent',
+    username: '',
+    ...overrides,
+  });
+}
+
+describe('qBittorrent API-key plugin', () => {
+  function createEnvironment(options: { addResponse?: string; version?: string } = {}) {
+    return createPluginEnvironment({
+      fetch: async url => {
+        if (url.endsWith('/app/version')) return new Response(options.version ?? 'v5.2.0');
+        if (url.endsWith('/torrents/add')) return new Response(options.addResponse ?? 'Ok.');
+        throw new Error('Unexpected request');
+      },
+      pluginScript: QBITTORRENT_PLUGIN_SCRIPT,
+    });
+  }
+
+  it('tests a cross-origin instance with its API key and omits cookies', async () => {
+    const { manager, requests } = createEnvironment();
+    await manager.test(qbittorrentInstance(), SAMPLE_QBIT_API_KEY);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, 'https://qbit.example/proxy/api/v2/app/version');
+    assert.equal(requests[0].init.method, 'GET');
+    assert.equal(new Headers(requests[0].init.headers).get('Authorization'), 'Bearer ' + SAMPLE_QBIT_API_KEY);
+    assert.equal(requests[0].init.credentials, 'omit');
+    assert.equal(requests[0].init.redirect, 'error');
+    assert.equal(manager.getInstances().length, 0);
+  });
+
+  it('sends a Unicode magnet and configured download options', async () => {
+    const { manager, requests } = createEnvironment();
+    await enableInstance(manager, qbittorrentInstance({ options: { category: 'Sample releases', savepath: '/downloads/Пример', shouldStart: 'false', tags: 'sample, test' } }), SAMPLE_QBIT_API_KEY);
+    await manager.send('home', { MagnetUri: SAMPLE_MAGNET, Title: 'Тестовый Релиз' }, async () => SAMPLE_MAGNET);
+    assert.deepEqual(requests.map(entry => entry.url.split('/').at(-1)), ['version', 'add']);
+    const addition = requests[1];
+    const fields = new URLSearchParams(String(addition.init.body));
+    assert.equal(fields.get('urls'), SAMPLE_MAGNET);
+    assert.equal(fields.get('savepath'), '/downloads/Пример');
+    assert.equal(fields.get('autoTMM'), 'false');
+    assert.equal(fields.get('category'), 'Sample releases');
+    assert.equal(fields.get('tags'), 'sample, test');
+    assert.equal(fields.get('stopped'), 'true');
+    assert.equal(addition.init.method, 'POST');
+    assert.equal(new Headers(addition.init.headers).get('Content-Type'), 'application/x-www-form-urlencoded');
+    for (const request of requests) {
+      assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer ' + SAMPLE_QBIT_API_KEY);
+      assert.equal(request.init.credentials, 'omit');
+    }
+  });
+
+  for (const addressSpace of ['local', 'loopback'] as const) {
+    it('declares ' + addressSpace + ' on connection tests and torrent additions', async () => {
+      const { manager, requests } = createEnvironment();
+      const instance = qbittorrentInstance({ baseUrl: 'http://qbit.internal:8080', options: { addressSpace } });
+      await enableInstance(manager, instance, SAMPLE_QBIT_API_KEY);
+      await manager.test(instance);
+      await manager.send(instance.id, { MagnetUri: SAMPLE_MAGNET, Title: 'Example Release' }, async () => SAMPLE_MAGNET);
+      assert.equal(requests.length, 3);
+      assert.equal(requests.every(entry => entry.init.targetAddressSpace === addressSpace), true);
+    });
+  }
+
+  it('restores API keys without a username and uses default download settings', async () => {
+    const { manager, storage } = createEnvironment();
+    await enableInstance(manager, qbittorrentInstance(), SAMPLE_QBIT_API_KEY);
+    const restored = createPluginEnvironment({
+      fetch: async url => new Response(url.endsWith('/app/version') ? 'v5.2.0' : 'Ok.'),
+      pluginScript: QBITTORRENT_PLUGIN_SCRIPT,
+      storage,
+    });
+    assert.equal(restored.manager.hasCredentials('home'), true);
+    assert.equal(restored.manager.getInstances()[0].username, '');
+    await restored.manager.send('home', { MagnetUri: SAMPLE_MAGNET, Title: 'Example Release' }, async () => SAMPLE_MAGNET);
+    assert.deepEqual(Object.fromEntries(new URLSearchParams(String(restored.requests[1].init.body))), { stopped: 'false', urls: SAMPLE_MAGNET });
+    assert.equal(new Headers(restored.requests[1].init.headers).get('Authorization'), 'Bearer ' + SAMPLE_QBIT_API_KEY);
+  });
+
+  it('synchronizes API keys across tabs and uses rotated keys', async () => {
+    const { manager, storage } = createEnvironment();
+    await enableInstance(manager, qbittorrentInstance(), SAMPLE_QBIT_API_KEY);
+    const other = createPluginEnvironment({
+      fetch: async () => new Response('v5.2.0'),
+      pluginScript: QBITTORRENT_PLUGIN_SCRIPT,
+      storage,
+    });
+    const replacement = 'qbt_' + 'b'.repeat(28);
+    await manager.setCredentials('home', replacement);
+    other.dispatchStorage();
+    await other.manager.test(other.manager.getInstances()[0]);
+    assert.equal(new Headers(other.requests[0].init.headers).get('Authorization'), 'Bearer ' + replacement);
+    await other.manager.upsertInstance(other.manager.getInstances()[0]);
+    assert.equal(JSON.parse(storage.get(STORAGE_KEY)!).instances[0].secret, replacement);
+  });
+
+  it('rejects unsupported auth methods, malformed keys, and a missing key before fetching', async () => {
+    const { manager, requests } = createEnvironment();
+    for (const authType of ['none', 'basic', 'bearer', 'session']) {
+      await assert.rejects(manager.upsertInstance(qbittorrentInstance({ authType }), SAMPLE_QBIT_API_KEY), /authentication method/);
+    }
+    for (const secret of ['short-key', SAMPLE_QBIT_API_KEY + '\r\n', 'qbt_' + '!'.repeat(28)]) {
+      await assert.rejects(manager.upsertInstance(qbittorrentInstance(), secret), /valid API key/);
+      await assert.rejects(manager.test(qbittorrentInstance(), secret), /valid API key/);
+    }
+    await assert.rejects(manager.upsertInstance(qbittorrentInstance()), /Enter an API key/);
+    assert.equal(requests.length, 0);
+  });
+
+  it('reports rejected API keys without sending a torrent', async () => {
+    const { manager, requests } = createPluginEnvironment({
+      fetch: async () => new Response('Forbidden', { status: 403 }),
+      pluginScript: QBITTORRENT_PLUGIN_SCRIPT,
+    });
+    await enableInstance(manager, qbittorrentInstance(), SAMPLE_QBIT_API_KEY);
+    await assert.rejects(manager.send('home', { MagnetUri: SAMPLE_MAGNET, Title: 'Example Release' }, async () => SAMPLE_MAGNET), /Authentication failed/);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url.endsWith('/app/version'), true);
+  });
+
+  for (const version of ['v4.6.7', 'v5.0.0', 'v5.1.9']) {
+    it('rejects ' + version + ' before adding a torrent', async () => {
+      const { manager, requests } = createEnvironment({ version });
+      await enableInstance(manager, qbittorrentInstance(), SAMPLE_QBIT_API_KEY);
+      await assert.rejects(manager.test(qbittorrentInstance()), /5.2 or newer/);
+      await assert.rejects(manager.send('home', { MagnetUri: SAMPLE_MAGNET, Title: 'Example Release' }, async () => SAMPLE_MAGNET), /5.2 or newer/);
+      assert.equal(requests.filter(entry => entry.url.endsWith('/torrents/add')).length, 0);
+    });
+  }
+
+  it('rejects unexpected version and torrent responses', async () => {
+    const invalid = createEnvironment({ version: '<html>Example login page</html>' });
+    await assert.rejects(invalid.manager.test(qbittorrentInstance(), SAMPLE_QBIT_API_KEY), /supported qBittorrent version/);
+    const failed = createEnvironment({ addResponse: 'Fails.' });
+    await enableInstance(failed.manager, qbittorrentInstance(), SAMPLE_QBIT_API_KEY);
+    await assert.rejects(failed.manager.send('home', { MagnetUri: SAMPLE_MAGNET, Title: 'Example Release' }, async () => SAMPLE_MAGNET), /did not accept/);
+  });
+
+  it('keeps qBittorrent and TorrPlay instances and actions independent', async () => {
+    const { manager } = createEnvironment();
+    await enableInstance(manager, qbittorrentInstance(), SAMPLE_QBIT_API_KEY);
+    await manager.upsertInstance(sampleInstance({ id: 'player' }));
+    assert.equal(manager.getTargets('qbittorrent').length, 1);
+    assert.equal(manager.getTargets('torrplay').length, 0);
+    assert.equal(manager.getInstances().length, 2);
+    const plugin = manager.getPlugins().find(entry => entry.id === 'qbittorrent');
+    assert.ok(plugin);
+    assert.equal(plugin.canHandle({ Link: '/api/v2.0/indexers/sample/download', Title: 'Example Release' }), true);
+    assert.equal(plugin.canHandle({ Link: 'https://tracker.example/file', Title: 'Example Release' }), false);
+  });
+});
+
+describe('qBittorrent API-key destination protection', () => {
+  it('requires a new key when changing the destination and preserves the original on rejection', async () => {
+    const { manager, requests, storage } = createPluginEnvironment({
+      fetch: async () => new Response('v5.2.0'),
+      pluginScript: QBITTORRENT_PLUGIN_SCRIPT,
+    });
+    const instance = qbittorrentInstance();
+    await enableInstance(manager, instance, SAMPLE_QBIT_API_KEY);
+    await assert.rejects(manager.test({ ...instance, baseUrl: 'https://other.example' }), /Enter and save credentials/);
+    await assert.rejects(manager.upsertInstance({ ...instance, baseUrl: 'https://other.example' }), /Enter an API key/);
+    assert.equal(manager.getInstances()[0].baseUrl, instance.baseUrl);
+    assert.equal(JSON.parse(storage.get(STORAGE_KEY)!).instances[0].secret, SAMPLE_QBIT_API_KEY);
+    assert.equal(requests.length, 0);
+  });
+
+  it('reports rejected additions without retrying them', async () => {
+    const { manager, requests } = createPluginEnvironment({
+      fetch: async url => url.endsWith('/app/version') ? new Response('v5.2.0') : new Response('Forbidden', { status: 403 }),
+      pluginScript: QBITTORRENT_PLUGIN_SCRIPT,
+    });
+    await enableInstance(manager, qbittorrentInstance(), SAMPLE_QBIT_API_KEY);
+    await assert.rejects(manager.send('home', { MagnetUri: SAMPLE_MAGNET, Title: 'Example Release' }, async () => SAMPLE_MAGNET), /Authentication failed/);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].url.endsWith('/torrents/add'), true);
   });
 });
