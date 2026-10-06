@@ -140,7 +140,8 @@ export function getIconVersion(): string {
     .createHash('sha256')
     .update(getIconSvg())
     .update(generatePngIcon(48))
-    .update(generatePngIcon(48, true))
+    .update(generatePngIcon(192, true))
+    .update(generatePngIcon(512, true))
     .digest('hex')
     .slice(0, 12);
   return iconVersion;
@@ -194,7 +195,7 @@ export function getBrandLogoSvg(): string {
 /**
  * Rasterizes the app icon to a PNG of the specified dimension with zero external dependencies.
  */
-export function generatePngIcon(size: number, isMaskable = false): Buffer {
+export function generatePngIcon(size: number, hasOpaqueBackground = false): Buffer {
   const width = Math.max(16, size);
   const height = width;
   const rowLen = 1 + width * 4;
@@ -219,7 +220,7 @@ export function generatePngIcon(size: number, isMaskable = false): Buffer {
       const cornerX = Math.max(0, Math.abs(x + 0.5 - width / 2) - (width / 2 - cornerRadius));
       const cornerY = Math.max(0, Math.abs(y + 0.5 - height / 2) - (height / 2 - cornerRadius));
       const backgroundCoverage = Math.max(0, Math.min(1, cornerRadius + 0.5 - Math.hypot(cornerX, cornerY)));
-      raw[px + 3] = isMaskable ? 255 : Math.round(255 * backgroundCoverage);
+      raw[px + 3] = hasOpaqueBackground ? 255 : Math.round(255 * backgroundCoverage);
     }
   }
 
@@ -265,12 +266,6 @@ export function getManifest(): string {
     description: 'Torrent Tracker Gateway & Search',
     display: 'standalone',
     icons: [
-      {
-        purpose: 'any',
-        sizes: 'any',
-        src: getIconUrl('/icon.svg'),
-        type: 'image/svg+xml',
-      },
       {
         purpose: 'any',
         sizes: '192x192',

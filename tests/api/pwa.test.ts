@@ -73,7 +73,7 @@ describe('App icon rendering', () => {
     }
   });
 
-  it('renders maskable icons with a fully opaque background and the shared glyph', () => {
+  it('renders app icons with a fully opaque background and the shared glyph', () => {
     for (const size of [192, 512]) {
       const png = generatePngIcon(size, true);
       const raw = zlib.inflateSync(png.subarray(41, 41 + png.readUInt32BE(33)));
@@ -190,22 +190,30 @@ describe('PWA & Mobile Installability Endpoints', () => {
     assert.equal(manifest.theme_color, '#141414');
     assert.equal(manifest.background_color, '#141414');
     assert.ok(Array.isArray(manifest.icons));
-    assert.ok(manifest.icons.some(icon => icon.src === getIconUrl('/icon.svg')));
     assert.ok(manifest.icons.some(icon => icon.src === getIconUrl('/icon-192.png')));
     assert.ok(manifest.icons.some(icon => icon.src === getIconUrl('/icon-512.png')));
+    for (const size of [192, 512]) {
+      assert.ok(manifest.icons.some(icon => icon.src === getIconUrl(`/icon-maskable-${size}.png`)));
+    }
     for (const icon of manifest.icons) {
       assert.equal(icon.purpose, icon.src.includes('/icon-maskable-') ? 'maskable' : 'any');
     }
-    for (const size of [192, 512]) {
-      const icon = manifest.icons.find(entry => entry.src === getIconUrl(`/icon-maskable-${size}.png`));
-      assert.ok(icon);
-      assert.equal(icon.sizes, `${size}x${size}`);
+    for (const icon of manifest.icons) {
+      assert.equal(icon.type, 'image/png');
+      const size = Number.parseInt(icon.sizes, 10);
+      assert.ok(size === 192 || size === 512);
       const iconRes = await fetch(`${baseUrl}${icon.src}`);
       assert.equal(iconRes.status, 200);
       assert.match(iconRes.headers.get('content-type') || '', /image\/png/);
       assert.equal(iconRes.headers.get('cache-control'), 'public, max-age=31536000, immutable');
       const png = Buffer.from(await iconRes.arrayBuffer());
       assert.deepEqual(png, generatePngIcon(size, true));
+      const raw = zlib.inflateSync(png.subarray(41, 41 + png.readUInt32BE(33)));
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          assert.equal(raw[y * (1 + size * 4) + 1 + x * 4 + 3], 255);
+        }
+      }
       const backgroundRgb = [1, 3, 5].map(offset => Number.parseInt(manifest.background_color.slice(offset, offset + 2), 16));
       for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) {
         assert.deepEqual(readPixel(png, x, y), [...backgroundRgb, 255]);
