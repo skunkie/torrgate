@@ -201,7 +201,7 @@ describe('TorrGate Web Client & Authentication', () => {
       for (const control of document.querySelectorAll('.header-right .nav-btn')) {
         assert.ok(control.getAttribute('aria-label'), control.id);
       }
-      assert.equal(document.querySelector('.workspace-title')?.textContent, 'Search releases');
+      assert.equal(document.querySelector('body > footer.workspace-footer')?.previousElementSibling?.tagName, 'MAIN');
       assert.equal(document.querySelector('#category-pills .active')?.getAttribute('aria-pressed'), 'true');
       dom.window.close();
     });
@@ -300,9 +300,11 @@ describe('TorrGate Web Client & Authentication', () => {
       assert.match(css, /:root\[data-theme='light'\] \{[\s\S]*?--accent-text: #ffffff;/);
       assert.match(css, /\.form-button\.primary \{[\s\S]*?background: var\(--accent\);/);
       const dom = new JSDOM(await (await fetch(`${baseUrl}/login`)).text());
-      assert.equal(dom.window.document.querySelector('h1')?.textContent, 'Sign in');
-      assert.equal(dom.window.document.querySelector('#apiKey')?.getAttribute('aria-describedby'), 'api-key-help');
-      assert.ok(dom.window.document.querySelector('.login-form .form-section'));
+      assert.equal(dom.window.document.querySelector('h1')?.textContent, 'API Key');
+      const apiKeyInput = dom.window.document.querySelector<HTMLInputElement>('.login-form #apiKey');
+      assert.equal(apiKeyInput?.getAttribute('aria-label'), 'API key');
+      assert.equal(apiKeyInput?.type, 'password');
+      assert.equal(apiKeyInput?.required, true);
       dom.window.close();
     });
 

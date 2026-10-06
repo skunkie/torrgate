@@ -23,6 +23,7 @@ export const WEB_CLIENT_STYLES = String.raw`
       display: flex;
       flex-direction: column;
       min-height: 100vh;
+      min-height: 100dvh;
       font-family: var(--font-sans);
       font-size: 13px;
       -webkit-font-smoothing: antialiased;
@@ -103,7 +104,7 @@ export const WEB_CLIENT_STYLES = String.raw`
       flex: 1;
       width: 100%;
       max-width: var(--content-width);
-      padding: 28px 28px 48px;
+      padding: 28px;
       margin: 0 auto;
     }
 
@@ -112,7 +113,7 @@ export const WEB_CLIENT_STYLES = String.raw`
       margin-bottom: var(--section-gap);
     }
     .workspace-title { font-size: 16px; font-weight: 600; line-height: 1.5; }
-    .search-section, .category-section { margin-top: 24px; }
+    .category-section { margin-top: 24px; }
     .search-inputs {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 240px) auto;
@@ -351,7 +352,6 @@ export const WEB_CLIENT_STYLES = String.raw`
     .empty-state {
       padding: 64px 20px;
       text-align: center;
-      border-bottom: 1px solid var(--border);
     }
     .empty-state svg {
       width: 44px;
@@ -793,7 +793,10 @@ export const WEB_CLIENT_STYLES = String.raw`
       flex-wrap: wrap;
       gap: 8px;
       justify-content: space-between;
-      padding-top: 18px;
+      width: 100%;
+      max-width: var(--content-width);
+      padding: 18px 28px 24px;
+      margin: 0 auto;
       font-size: 11px;
       color: var(--text-muted);
     }
@@ -811,8 +814,9 @@ export const WEB_CLIENT_STYLES = String.raw`
         padding: 12px 16px;
       }
       main {
-        padding: 24px 16px 36px;
+        padding: 24px 16px;
       }
+      .workspace-footer { padding: 18px 16px 24px; }
       .search-inputs {
         grid-template-columns: minmax(0, 1fr) auto;
       }

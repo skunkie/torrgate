@@ -117,8 +117,6 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
   <!-- Main Content Area -->
   <main>
     <div class="search-panel">
-      <h1 class="workspace-title">Search releases</h1>
-      <p class="form-caption">Find releases across your enabled trackers.</p>
       <form id="search-form">
         <fieldset class="form-section search-section">
           <legend>Search</legend>
@@ -202,8 +200,8 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
         <p>Type a release title, series, or keyword above to query all aggregated torrent trackers simultaneously.</p>
       </div>
     </div>
-    <footer class="workspace-footer"><span>Search powered by your configured trackers</span><span><kbd>/</kbd> Focus search &middot; <kbd>?</kbd> Shortcuts</span></footer>
   </main>
+  <footer class="workspace-footer"><span>Search powered by your configured trackers</span><span><kbd>/</kbd> Focus search &middot; <kbd>?</kbd> Shortcuts</span></footer>
 
   <!-- Trackers Modal -->
   <div class="modal-overlay" id="modal-trackers">

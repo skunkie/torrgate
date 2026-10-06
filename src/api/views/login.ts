@@ -48,19 +48,11 @@ ${getIconLinkTags()}
   </div>
 </header>
 <main class="wrap">
-  <h1>Sign in</h1>
-  <p class="form-caption">Enter your API key to access TorrGate.</p>
+  <h1>API Key</h1>
   ${errorHtml}
   <form method="post" action="${action}" class="login-form">
     <input type="hidden" name="returnUrl" value="${returnUrl}">
-    <fieldset class="form-section">
-      <legend>Authentication</legend>
-      <div class="form-field">
-        <label for="apiKey">API key</label>
-        <input type="password" class="form-input" id="apiKey" name="apiKey" autocomplete="current-password" aria-describedby="api-key-help" autofocus required>
-      </div>
-      <p class="form-caption" id="api-key-help">Use the key configured for your gateway.</p>
-    </fieldset>
+    <input type="password" class="form-input" id="apiKey" name="apiKey" autocomplete="current-password" aria-label="API key" autofocus required>
     <div class="login-actions"><button type="submit" class="form-button primary">Sign in</button></div>
   </form>
 </main>
