@@ -201,7 +201,7 @@ export function renderWebClientPage(options: RenderWebClientOptions): string {
       </div>
     </div>
   </main>
-  <footer class="workspace-footer"><span>Search powered by your configured trackers</span><span><kbd>/</kbd> Focus search &middot; <kbd>?</kbd> Shortcuts</span></footer>
+  <footer class="workspace-footer"><span><kbd>/</kbd> Focus search &middot; <kbd>?</kbd> Shortcuts</span></footer>
 
   <!-- Trackers Modal -->
   <div class="modal-overlay" id="modal-trackers">

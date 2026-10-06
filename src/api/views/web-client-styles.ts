@@ -792,7 +792,7 @@ export const WEB_CLIENT_STYLES = String.raw`
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      justify-content: space-between;
+      justify-content: flex-end;
       width: 100%;
       max-width: var(--content-width);
       padding: 18px 28px 24px;
