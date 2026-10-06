@@ -24,18 +24,18 @@ import { createApp } from '../../src/index.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 
 /**
- * Reads one RGB pixel from an unfiltered RGBA PNG produced by generatePngIcon.
+ * Reads one RGBA pixel from an unfiltered RGBA PNG produced by generatePngIcon.
  */
-function readPixel(png: Buffer, x: number, y: number): [number, number, number] {
+function readPixel(png: Buffer, x: number, y: number): [number, number, number, number] {
   const width = png.readUInt32BE(16);
   const idatLength = png.readUInt32BE(33);
   const raw = zlib.inflateSync(png.subarray(41, 41 + idatLength));
   const offset = y * (1 + width * 4) + 1 + x * 4;
-  return [raw[offset], raw[offset + 1], raw[offset + 2]];
+  return [raw[offset], raw[offset + 1], raw[offset + 2], raw[offset + 3]];
 }
 
-const ACCENT: [number, number, number] = [16, 185, 129];
-const BACKGROUND: [number, number, number] = [15, 15, 15];
+const ACCENT: [number, number, number, number] = [16, 185, 129, 255];
+const BACKGROUND: [number, number, number, number] = [15, 15, 15, 255];
 
 describe('App icon rendering', () => {
   it('draws the peer-hub glyph in the SVG icon', () => {
@@ -47,11 +47,52 @@ describe('App icon rendering', () => {
   it('rasterizes the same hub, ring hole, and peers into the PNG icon', () => {
     const png = generatePngIcon(512);
     assert.equal(png.readUInt32BE(16), 512);
-    assert.deepEqual(readPixel(png, 4, 4), BACKGROUND);
+    assert.deepEqual(readPixel(png, 256, 4), BACKGROUND);
     assert.deepEqual(readPixel(png, 256, 256), BACKGROUND);
     assert.deepEqual(readPixel(png, 296, 256), ACCENT);
     assert.deepEqual(readPixel(png, 256, 149), ACCENT);
     assert.deepEqual(readPixel(png, 349, 202), ACCENT);
+  });
+
+  it('renders transparent, anti-aliased rounded corners at every icon size', () => {
+    assert.match(getIconSvg(), /rx="128"/);
+    for (const size of [16, 32, 48, 192, 512]) {
+      const png = generatePngIcon(size);
+      for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) {
+        assert.equal(readPixel(png, x, y)[3], 0);
+      }
+      assert.equal(readPixel(png, Math.floor(size / 2), 0)[3], 255);
+      const raw = zlib.inflateSync(png.subarray(41, 41 + png.readUInt32BE(33)));
+      const alphas = new Set<number>();
+      for (let y = 0; y < size / 4; y++) {
+        for (let x = 0; x < size / 4; x++) {
+          alphas.add(raw[y * (1 + size * 4) + 1 + x * 4 + 3]);
+        }
+      }
+      assert.ok([...alphas].some(alpha => alpha > 0 && alpha < 255));
+    }
+  });
+
+  it('renders maskable icons with a fully opaque background and the shared glyph', () => {
+    for (const size of [192, 512]) {
+      const png = generatePngIcon(size, true);
+      const raw = zlib.inflateSync(png.subarray(41, 41 + png.readUInt32BE(33)));
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          assert.equal(raw[y * (1 + size * 4) + 1 + x * 4 + 3], 255);
+        }
+      }
+      assert.deepEqual(readPixel(png, 0, 0), BACKGROUND);
+      assert.deepEqual(readPixel(png, Math.floor(size / 2), Math.floor(size / 2)), BACKGROUND);
+      const rounded = generatePngIcon(size);
+      const roundedRaw = zlib.inflateSync(rounded.subarray(41, 41 + rounded.readUInt32BE(33)));
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const offset = y * (1 + size * 4) + 1 + x * 4;
+          assert.deepEqual(raw.subarray(offset, offset + 3), roundedRaw.subarray(offset, offset + 3));
+        }
+      }
+    }
   });
 
   it('anti-aliases glyph edges at small sizes', () => {
@@ -135,7 +176,7 @@ describe('PWA & Mobile Installability Endpoints', () => {
     const manifest = (await res.json()) as {
       background_color: string;
       display: string;
-      icons: { sizes: string; src: string; type: string }[];
+      icons: { purpose: string; sizes: string; src: string; type: string }[];
       name: string;
       short_name: string;
       start_url: string;
@@ -152,6 +193,19 @@ describe('PWA & Mobile Installability Endpoints', () => {
     assert.ok(manifest.icons.some(icon => icon.src === getIconUrl('/icon.svg')));
     assert.ok(manifest.icons.some(icon => icon.src === getIconUrl('/icon-192.png')));
     assert.ok(manifest.icons.some(icon => icon.src === getIconUrl('/icon-512.png')));
+    for (const icon of manifest.icons) {
+      assert.equal(icon.purpose, icon.src.includes('/icon-maskable-') ? 'maskable' : 'any');
+    }
+    for (const size of [192, 512]) {
+      const icon = manifest.icons.find(entry => entry.src === getIconUrl(`/icon-maskable-${size}.png`));
+      assert.ok(icon);
+      assert.equal(icon.sizes, `${size}x${size}`);
+      const iconRes = await fetch(`${baseUrl}${icon.src}`);
+      assert.equal(iconRes.status, 200);
+      assert.match(iconRes.headers.get('content-type') || '', /image\/png/);
+      assert.equal(iconRes.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+      assert.deepEqual(Buffer.from(await iconRes.arrayBuffer()), generatePngIcon(size, true));
+    }
   });
 
   it('GET /sw.js should serve valid Service Worker script', async () => {
@@ -164,6 +218,9 @@ describe('PWA & Mobile Installability Endpoints', () => {
     assert.ok(script.includes("addEventListener('fetch'"));
     assert.ok(script.includes(`torrgate-shell-${getIconVersion()}`));
     assert.ok(script.includes(`"${getIconUrl('/icon-512.png')}"`));
+    for (const size of [192, 512]) {
+      assert.ok(script.includes(`"${getIconUrl(`/icon-maskable-${size}.png`)}"`));
+    }
     assert.ok(script.includes('"/theme.js"'));
     assert.ok(script.includes('"/web-client.css"'));
     assert.ok(script.includes('"/web-client.js"'));

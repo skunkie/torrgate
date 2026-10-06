@@ -50,6 +50,7 @@ const GLYPH_GRID_UNITS = 24;
 const GLYPH_OFFSET_PX = 96;
 const GLYPH_SIZE_PX = 320;
 const CANVAS_SIZE_PX = 512;
+const CORNER_RADIUS_PX = 128;
 
 const STROKE_WIDTH = 2;
 const HUB = { radius: 3, x: 12, y: 12 };
@@ -139,6 +140,7 @@ export function getIconVersion(): string {
     .createHash('sha256')
     .update(getIconSvg())
     .update(generatePngIcon(48))
+    .update(generatePngIcon(48, true))
     .digest('hex')
     .slice(0, 12);
   return iconVersion;
@@ -192,13 +194,14 @@ export function getBrandLogoSvg(): string {
 /**
  * Rasterizes the app icon to a PNG of the specified dimension with zero external dependencies.
  */
-export function generatePngIcon(size: number): Buffer {
+export function generatePngIcon(size: number, isMaskable = false): Buffer {
   const width = Math.max(16, size);
   const height = width;
   const rowLen = 1 + width * 4;
   const raw = Buffer.alloc(height * rowLen);
   const unitsPerPixel = (CANVAS_SIZE_PX / width) * (GLYPH_GRID_UNITS / GLYPH_SIZE_PX);
   const offsetUnits = (GLYPH_OFFSET_PX * GLYPH_GRID_UNITS) / GLYPH_SIZE_PX;
+  const cornerRadius = (CORNER_RADIUS_PX * width) / CANVAS_SIZE_PX;
 
   for (let y = 0; y < height; y++) {
     const rowOffset = y * rowLen;
@@ -213,7 +216,10 @@ export function generatePngIcon(size: number): Buffer {
           BACKGROUND_RGB[channel] + (ACCENT_RGB[channel] - BACKGROUND_RGB[channel]) * coverage,
         );
       }
-      raw[px + 3] = 255;
+      const cornerX = Math.max(0, Math.abs(x + 0.5 - width / 2) - (width / 2 - cornerRadius));
+      const cornerY = Math.max(0, Math.abs(y + 0.5 - height / 2) - (height / 2 - cornerRadius));
+      const backgroundCoverage = Math.max(0, Math.min(1, cornerRadius + 0.5 - Math.hypot(cornerX, cornerY)));
+      raw[px + 3] = isMaskable ? 255 : Math.round(255 * backgroundCoverage);
     }
   }
 
@@ -243,7 +249,7 @@ export function generatePngIcon(size: number): Buffer {
 export function getIconSvg(): string {
   const scale = round2(GLYPH_SIZE_PX / GLYPH_GRID_UNITS);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS_SIZE_PX} ${CANVAS_SIZE_PX}" fill="none">
-  <rect width="${CANVAS_SIZE_PX}" height="${CANVAS_SIZE_PX}" rx="128" fill="${BACKGROUND_HEX}"/>
+  <rect width="${CANVAS_SIZE_PX}" height="${CANVAS_SIZE_PX}" rx="${CORNER_RADIUS_PX}" fill="${BACKGROUND_HEX}"/>
   <g transform="translate(${GLYPH_OFFSET_PX}, ${GLYPH_OFFSET_PX}) scale(${scale})" stroke="${ACCENT_HEX}" stroke-width="${STROKE_WIDTH}" stroke-linecap="round">
     ${glyphElements(ACCENT_HEX)}
   </g>
@@ -260,21 +266,33 @@ export function getManifest(): string {
     display: 'standalone',
     icons: [
       {
-        purpose: 'any maskable',
+        purpose: 'any',
         sizes: 'any',
         src: getIconUrl('/icon.svg'),
         type: 'image/svg+xml',
       },
       {
-        purpose: 'any maskable',
+        purpose: 'any',
         sizes: '192x192',
         src: getIconUrl('/icon-192.png'),
         type: 'image/png',
       },
       {
-        purpose: 'any maskable',
+        purpose: 'any',
         sizes: '512x512',
         src: getIconUrl('/icon-512.png'),
+        type: 'image/png',
+      },
+      {
+        purpose: 'maskable',
+        sizes: '192x192',
+        src: getIconUrl('/icon-maskable-192.png'),
+        type: 'image/png',
+      },
+      {
+        purpose: 'maskable',
+        sizes: '512x512',
+        src: getIconUrl('/icon-maskable-512.png'),
         type: 'image/png',
       },
     ],
@@ -299,7 +317,7 @@ export function getServiceWorker(): string {
     '/theme.js',
     '/web-client.css',
     '/web-client.js',
-    ...['/icon.svg', '/icon-192.png', '/icon-512.png'].map(getIconUrl),
+    ...['/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'].map(getIconUrl),
   ];
   return `// TorrGate Service Worker
 const CACHE_NAME = 'torrgate-shell-${getIconVersion()}';

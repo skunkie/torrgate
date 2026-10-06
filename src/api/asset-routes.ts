@@ -48,6 +48,8 @@ export function createAssetRouter(): Router {
       render: () => generatePngIcon(192),
     },
     { contentType: 'image/png', paths: ['/icon-512.png'], render: () => generatePngIcon(512) },
+    { contentType: 'image/png', paths: ['/icon-maskable-192.png'], render: () => generatePngIcon(192, true) },
+    { contentType: 'image/png', paths: ['/icon-maskable-512.png'], render: () => generatePngIcon(512, true) },
     { contentType: 'image/x-icon', paths: ['/favicon.ico'], render: generateFaviconIco },
   ];
 
