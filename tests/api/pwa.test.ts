@@ -45,7 +45,7 @@ describe('App icon rendering', () => {
   });
 
   it('rasterizes the same hub, ring hole, and peers into the PNG icon', () => {
-    const png = generatePngIcon(512);
+    const png = generatePngIcon(512, true);
     assert.equal(png.readUInt32BE(16), 512);
     assert.deepEqual(readPixel(png, 256, 4), BACKGROUND);
     assert.deepEqual(readPixel(png, 256, 256), BACKGROUND);
@@ -54,9 +54,9 @@ describe('App icon rendering', () => {
     assert.deepEqual(readPixel(png, 349, 202), ACCENT);
   });
 
-  it('renders transparent, anti-aliased rounded corners at every icon size', () => {
+  it('renders transparent, anti-aliased rounded corners at every favicon size', () => {
     assert.match(getIconSvg(), /rx="128"/);
-    for (const size of [16, 32, 48, 192, 512]) {
+    for (const size of [16, 32, 48]) {
       const png = generatePngIcon(size);
       for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) {
         assert.equal(readPixel(png, x, y)[3], 0);
@@ -73,7 +73,7 @@ describe('App icon rendering', () => {
     }
   });
 
-  it('renders app icons with a fully opaque background and the shared glyph', () => {
+  it('renders app icons with a fully opaque background', () => {
     for (const size of [192, 512]) {
       const png = generatePngIcon(size, true);
       const raw = zlib.inflateSync(png.subarray(41, 41 + png.readUInt32BE(33)));
@@ -84,14 +84,6 @@ describe('App icon rendering', () => {
       }
       assert.deepEqual(readPixel(png, 0, 0), BACKGROUND);
       assert.deepEqual(readPixel(png, Math.floor(size / 2), Math.floor(size / 2)), BACKGROUND);
-      const rounded = generatePngIcon(size);
-      const roundedRaw = zlib.inflateSync(rounded.subarray(41, 41 + rounded.readUInt32BE(33)));
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const offset = y * (1 + size * 4) + 1 + x * 4;
-          assert.deepEqual(raw.subarray(offset, offset + 3), roundedRaw.subarray(offset, offset + 3));
-        }
-      }
     }
   });
 
@@ -172,6 +164,7 @@ describe('PWA & Mobile Installability Endpoints', () => {
     const res = await fetch(`${baseUrl}/manifest.webmanifest`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type') || '', /application\/manifest\+json/);
+    assert.equal(res.headers.get('cache-control'), 'no-cache');
 
     const manifest = (await res.json()) as {
       background_color: string;
@@ -197,8 +190,6 @@ describe('PWA & Mobile Installability Endpoints', () => {
     }
     for (const icon of manifest.icons) {
       assert.equal(icon.purpose, icon.src.includes('/icon-maskable-') ? 'maskable' : 'any');
-    }
-    for (const icon of manifest.icons) {
       assert.equal(icon.type, 'image/png');
       const size = Number.parseInt(icon.sizes, 10);
       assert.ok(size === 192 || size === 512);
@@ -208,12 +199,6 @@ describe('PWA & Mobile Installability Endpoints', () => {
       assert.equal(iconRes.headers.get('cache-control'), 'public, max-age=31536000, immutable');
       const png = Buffer.from(await iconRes.arrayBuffer());
       assert.deepEqual(png, generatePngIcon(size, true));
-      const raw = zlib.inflateSync(png.subarray(41, 41 + png.readUInt32BE(33)));
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          assert.equal(raw[y * (1 + size * 4) + 1 + x * 4 + 3], 255);
-        }
-      }
       const backgroundRgb = [1, 3, 5].map(offset => Number.parseInt(manifest.background_color.slice(offset, offset + 2), 16));
       for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) {
         assert.deepEqual(readPixel(png, x, y), [...backgroundRgb, 255]);

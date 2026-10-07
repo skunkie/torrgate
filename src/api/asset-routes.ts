@@ -30,7 +30,7 @@ export function createAssetRouter(): Router {
   // PWA Manifest, Service Worker, and App Icons
   router.get('/manifest.webmanifest', (_req, res) => {
     res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Cache-Control', 'no-cache');
     res.send(getManifest());
   });
 
