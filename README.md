@@ -103,6 +103,8 @@ TorrGate can be configured via environment variables or a `.env` file:
 
 See [.env.example](.env.example) for a pre-configured template.
 
+Browser sign-in issues a signed session cookie valid for seven days. Sign out clears the cookie from the browser. Sessions are stateless: a copied token remains valid until it expires, including after sign-out or a server restart. To invalidate existing tokens, rotate `API_KEY` on every gateway instance using that key; API clients must then use the replacement key.
+
 ### Tracker Environment Variable Derivation
 
 Tracker-specific credentials and session cookies are derived dynamically from the tracker definition's `id` (falling back to `site` or `name`):

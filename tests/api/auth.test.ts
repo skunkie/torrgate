@@ -11,6 +11,7 @@ import {
   parseCookieHeader,
   SESSION_COOKIE_NAME,
   timingSafeCompare,
+  verifySessionToken,
 } from '../../src/api/middleware/auth.js';
 import { HttpClient } from '../../src/http/http-client.js';
 import { createApp } from '../../src/index.js';
@@ -263,6 +264,21 @@ describe('API Key Authentication Middleware', () => {
       assert.ok(setCookie.includes('Max-Age=0'));
     });
 
+    it('should accept an unexpired copied session token after browser sign-out', async () => {
+      const cookie = `${SESSION_COOKIE_NAME}=${createSessionToken(sampleApiKey)}`;
+      const logout = await fetch(`${securedBaseUrl}/logout`, {
+        headers: { Cookie: cookie },
+        redirect: 'manual',
+      });
+      assert.equal(logout.status, 302);
+      assert.ok(logout.headers.get('set-cookie')?.includes('Max-Age=0'));
+
+      const response = await fetch(`${securedBaseUrl}/api/v2.0/indexers`, {
+        headers: { Cookie: cookie },
+      });
+      assert.equal(response.status, 200);
+    });
+
     it('should include jackett_apikey in JSON search result Link and allow unauthenticated download via that link', async () => {
       const searchRes = await fetch(`${securedBaseUrl}/api/v2.0/indexers/rutor/results?Query=sample&apikey=${sampleApiKey}`);
       assert.equal(searchRes.status, 200);
@@ -353,6 +369,19 @@ describe('API Key Authentication Middleware', () => {
       assert.equal(timingSafeCompare(undefined, 'secret'), false);
       assert.equal(timingSafeCompare('secret', undefined), false);
       assert.equal(timingSafeCompare(undefined, undefined), false);
+    });
+  });
+
+  describe('verifySessionToken', () => {
+    it('should accept unexpired tokens only with the active signing key', () => {
+      const signingKey = 'sample-signing-key';
+      const token = createSessionToken(signingKey);
+      assert.equal(verifySessionToken(token, signingKey), true);
+      assert.equal(verifySessionToken(token, 'replacement-signing-key'), false);
+
+      const lifetimeMs = 7 * 24 * 60 * 60 * 1000;
+      const expiredToken = createSessionToken(signingKey, Date.now() - lifetimeMs - 1000);
+      assert.equal(verifySessionToken(expiredToken, signingKey), false);
     });
   });
 
