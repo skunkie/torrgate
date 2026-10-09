@@ -150,6 +150,17 @@ export class SearchController {
         return;
       }
 
+      const provider = this.registry.getProvider(indexerParam);
+      if (!provider) {
+        res.status(404).json({
+          error: 'NotFound',
+          message: `Indexer '${indexerParam}' not found`,
+          statusCode: 404,
+          success: false,
+        });
+        return;
+      }
+
       const effectiveApiKey = getProvidedApiKey(req) || this.configuredApiKey;
       const origin = `${req.protocol}://${req.get('host') || ''}`;
       const cacheKey = buildCacheKey('details', [
@@ -166,17 +177,6 @@ export class SearchController {
           res.json(cached);
           return;
         }
-      }
-
-      const provider = this.registry.getProvider(indexerParam);
-      if (!provider) {
-        res.status(404).json({
-          error: 'NotFound',
-          message: `Indexer '${indexerParam}' not found`,
-          statusCode: 404,
-          success: false,
-        });
-        return;
       }
 
       let details: TopicDetails | null = null;

@@ -12,6 +12,7 @@ import { createApp } from '../../src/index.js';
 import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 import { CardigannDefinition } from '../../src/providers/types.js';
+import { ApiErrorResponse } from '../../src/types/api.js';
 import { JackettSearchResponse } from '../../src/types/jackett.js';
 import { TopicDetails, TorrentItem } from '../../src/types/torrent.js';
 
@@ -318,6 +319,42 @@ describe('API Search and RSS Caching Integration', () => {
     assert.equal(resSecond.status, 200);
     assert.equal(resSecond.headers.get('x-cache'), 'HIT');
     assert.equal(topicCallCount, 1);
+  });
+
+  it('should return 404 for a removed indexer even when its topic details remain cached', async () => {
+    const sharedCache = new MemoryCache<unknown>(300);
+    const testServers: http.Server[] = [];
+    const baseUrls: string[] = [];
+    try {
+      const populatedRegistry = new ProviderRegistry(new HttpClient());
+      const provider = populatedRegistry.getProvider('rutor');
+      assert.ok(provider);
+      provider.getTopicDetails = async () => sampleDetails;
+      const emptyRegistry = new ProviderRegistry(new HttpClient(), 'tests/fixtures');
+      for (const registry of [populatedRegistry, emptyRegistry]) {
+        const testServer = http.createServer(createApp(registry, { cache: sharedCache }));
+        testServers.push(testServer);
+        await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+        const port = (testServer.address() as { port: number }).port;
+        baseUrls.push(`http://127.0.0.1:${port}/api/v2.0/indexers/rutor/details/12345`);
+      }
+
+      const first = await requestWithHost(baseUrls[0], 'shared.example');
+      assert.equal(first.status, 200);
+      assert.equal(first.cacheStatus, 'MISS');
+      const cached = await requestWithHost(baseUrls[0], 'shared.example');
+      assert.equal(cached.status, 200);
+      assert.equal(cached.cacheStatus, 'HIT');
+      assert.deepEqual(JSON.parse(cached.body), [sampleDetails]);
+
+      const removed = await requestWithHost(baseUrls[1], 'shared.example');
+      assert.equal(removed.status, 404);
+      const body = JSON.parse(removed.body) as ApiErrorResponse;
+      assert.equal(body.error, 'NotFound');
+      assert.equal(body.message, "Indexer 'rutor' not found");
+    } finally {
+      await Promise.all(testServers.map(testServer => new Promise<void>(resolve => testServer.close(() => resolve()))));
+    }
   });
 
   it('should partition cached topic details by response origin', async () => {
