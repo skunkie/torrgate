@@ -156,7 +156,7 @@ paths:
   /{indexer}/download:
     get:
       summary: Download .torrent file
-      description: Proxies and streams .torrent file downloads from trackers requiring cookies or proxy access.
+      description: Proxies and streams .torrent file downloads from trackers requiring cookies or proxy access. Supply url or path; a non-empty url takes precedence.
       operationId: downloadTorrent
       parameters:
         - name: indexer
@@ -168,11 +168,18 @@ paths:
             example: "rutracker-ru"
         - name: url
           in: query
-          required: true
-          description: Relative or absolute download URL for the .torrent file
+          required: false
+          description: Literal relative or absolute download URL for the .torrent file
           schema:
             type: string
             example: "https://rutracker.org/forum/dl.php?t=100001"
+        - name: path
+          in: query
+          required: false
+          description: Legacy download URL or root-relative path, optionally base64url-encoded
+          schema:
+            type: string
+            example: "/forum/dl.php?t=100001"
       responses:
         "200":
           description: Torrent file binary content
@@ -199,7 +206,7 @@ paths:
   /{indexer}/magnet:
     get:
       summary: Extract magnet URI from .torrent file
-      description: Downloads the .torrent file through the indexer and builds a magnet URI from it, with the info hash computed from the file's info dictionary, the release name as the display name, and the file's announce URLs as trackers.
+      description: Downloads the .torrent file through the indexer and builds a magnet URI from it, with the info hash computed from the file's info dictionary, the release name as the display name, and the file's announce URLs as trackers. Supply url or path; a non-empty url takes precedence.
       operationId: getMagnetUri
       parameters:
         - name: indexer
@@ -211,11 +218,18 @@ paths:
             example: "rutracker-ru"
         - name: url
           in: query
-          required: true
-          description: Relative or absolute download URL for the .torrent file
+          required: false
+          description: Literal relative or absolute download URL for the .torrent file
           schema:
             type: string
             example: "https://rutracker.org/forum/dl.php?t=100001"
+        - name: path
+          in: query
+          required: false
+          description: Legacy download URL or root-relative path, optionally base64url-encoded
+          schema:
+            type: string
+            example: "/forum/dl.php?t=100001"
       responses:
         "200":
           description: Magnet URI and info hash of the .torrent file

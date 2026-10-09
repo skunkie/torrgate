@@ -219,6 +219,8 @@ Fetches `.torrent` files through TorrGate for trackers that require session cook
 
 Download URLs and every redirect must match a configured mirror's scheme and port. The mirror hostname and its download subdomains are accepted. HTTP downloads require an explicitly configured HTTP mirror.
 
+The `url` parameter accepts a literal relative or absolute URL. The legacy `path` parameter also accepts a base64url-encoded URL or root-relative path. A non-empty `url` takes precedence over `path`. These rules also apply to magnet extraction.
+
 ### 6. Magnet URI from `.torrent` File
 ```http
 GET /api/v2.0/indexers/:indexer/magnet?url=<torrent-url>

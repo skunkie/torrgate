@@ -188,13 +188,18 @@ describe('Download Proxy Controller Integration', () => {
 
   it('should successfully proxy download using base64url-encoded path parameter', async () => {
     const originalGetBinary = httpClient.getBinary;
-    httpClient.getBinary = async () => ({ data: Buffer.from('d8:announce31:http://retracker.local/announcee'), headers: {} });
+    const requestedUrls: string[] = [];
+    httpClient.getBinary = async url => {
+      requestedUrls.push(url);
+      return { data: Buffer.from('d8:announce31:http://retracker.local/announcee'), headers: {} };
+    };
 
     try {
       const encodedPath = Buffer.from('https://rutor.info/download/12345').toString('base64url');
       const res = await fetch(`${baseUrl}/api/v2.0/indexers/rutor/download?path=${encodedPath}`);
 
       assert.equal(res.status, 200);
+      assert.deepEqual(requestedUrls, ['https://rutor.info/download/12345']);
       assert.equal(res.headers.get('content-type'), 'application/x-bittorrent');
       const buffer = await res.arrayBuffer();
       const text = Buffer.from(buffer).toString('utf-8');
@@ -203,6 +208,34 @@ describe('Download Proxy Controller Integration', () => {
       httpClient.getBinary = originalGetBinary;
     }
   });
+
+  for (const endpoint of ['download', 'magnet']) {
+    it(`should distinguish literal urls from encoded paths for ${endpoint}`, async () => {
+      const originalGetBinary = httpClient.getBinary;
+      const requestedUrls: string[] = [];
+      const testTorrent = 'd4:infod6:lengthi5e4:name15:Example Release12:piece lengthi16384e6:pieces20:AAAAAAAAAAAAAAAAAAAAee';
+      httpClient.getBinary = async url => {
+        requestedUrls.push(url);
+        return { data: Buffer.from(testTorrent), headers: {} };
+      };
+      try {
+        for (const { expectedUrl, query } of [
+          { expectedUrl: 'https://rutor.info/L2ZpbGU', query: 'url=L2ZpbGU' },
+          { expectedUrl: 'https://rutor.info/file', query: 'path=L2ZpbGU' },
+          { expectedUrl: 'https://rutor.info/L2ZpbGU', query: 'url=L2ZpbGU&path=L2ZpbGU' },
+          { expectedUrl: 'https://rutor.info/file', query: 'url=&path=L2ZpbGU' },
+          { expectedUrl: 'https://rutor.info/download/12345', query: 'path=%2Fdownload%2F12345' },
+        ]) {
+          requestedUrls.length = 0;
+          const response = await fetch(`${baseUrl}/api/v2.0/indexers/rutor/${endpoint}?${query}`);
+          assert.equal(response.status, 200);
+          assert.deepEqual(requestedUrls, [expectedUrl]);
+        }
+      } finally {
+        httpClient.getBinary = originalGetBinary;
+      }
+    });
+  }
 
   it('should return 403 Forbidden when download host is not allowed for provider (SSRF protection)', async () => {
     const sampleUrl = encodeURIComponent('http://169.254.169.254/latest/meta-data');

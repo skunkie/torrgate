@@ -94,7 +94,8 @@ export class DownloadController {
       return null;
     }
 
-    let rawUrl = getQueryString(req.query, 'url', 'path') ?? '';
+    const providedUrl = getQueryString(req.query, 'url');
+    let rawUrl = providedUrl ?? getQueryString(req.query, 'path') ?? '';
     if (!rawUrl) {
       res.status(400).json({
         error: 'BadRequest',
@@ -106,6 +107,7 @@ export class DownloadController {
     }
 
     if (
+      providedUrl === undefined &&
       !rawUrl.startsWith('http://') &&
       !rawUrl.startsWith('https://') &&
       !rawUrl.startsWith('/')
