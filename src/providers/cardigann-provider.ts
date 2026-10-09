@@ -10,7 +10,7 @@ import * as cheerio from 'cheerio';
 
 import { MemoryCache } from '../cache/memory-cache.js';
 import { BatchCacheStore, buildCacheKey, CacheStore, CacheWrite } from '../cache/store.js';
-import { getTopicPathStore } from '../cache/topic-path-cache.js';
+import { createTopicPathCache, getLocalTopicPathStore, getTopicPathStore } from '../cache/topic-path-cache.js';
 import { BinaryResponse, encodeWin1251QueryParam, HttpClient } from '../http/http-client.js';
 import { RequestSlotStore, RequestThrottle } from '../http/request-throttle.js';
 import {
@@ -65,7 +65,7 @@ export class CardigannProvider implements TrackerProvider {
   readonly definition: CardigannDefinition;
   readonly encoding: 'utf-8' | 'windows-1251';
   readonly id: string;
-  private readonly localTopicPaths = new MemoryCache<string>(300, Infinity);
+  private localTopicPaths?: MemoryCache<string>;
   readonly name: ProviderName;
   /** Spaces requests to trackers whose definition sets `requestDelay`. */
   private readonly requestThrottle?: RequestThrottle;
@@ -118,6 +118,7 @@ export class CardigannProvider implements TrackerProvider {
    */
   shareTopicPaths(store: CacheStore, namespace: string, cacheTtlSeconds: number): void {
     this.sharedTopicPaths = getTopicPathStore(store);
+    this.localTopicPaths = store instanceof MemoryCache ? undefined : getLocalTopicPathStore(store);
     this.topicPathScope = createHash('sha256')
       .update(JSON.stringify([namespace, this.definition]))
       .digest('hex');
@@ -136,10 +137,14 @@ export class CardigannProvider implements TrackerProvider {
     return this.searchTopicPaths.get(item);
   }
 
+  /**
+   * Restores local paths for standalone or Redis-backed providers. In-memory shared paths
+   * are written by the caller's batch so each path is stored once.
+   */
   restoreTopicPaths(entries: readonly CacheWrite<string>[]): void {
-    for (const { key, value } of entries) {
-      this.localTopicPaths.set(key, value, this.topicPathTtlSeconds);
-    }
+    if ((!this.localTopicPaths && this.sharedTopicPaths) || entries.length === 0) return;
+    this.localTopicPaths ??= createTopicPathCache();
+    this.localTopicPaths.setMany(entries, this.topicPathTtlSeconds);
   }
 
   /**
@@ -279,7 +284,7 @@ export class CardigannProvider implements TrackerProvider {
       let topicPath: string;
       const rememberedTopicPath = this.definition.details?.path
         ? undefined
-        : this.localTopicPaths.get<string>(this.topicPathKey(id))
+        : this.localTopicPaths?.get<string>(this.topicPathKey(id))
           ?? await this.sharedTopicPaths?.get<string>(this.topicPathKey(id));
       if (this.definition.details?.path) {
         topicPath = renderTemplate(this.definition.details.path, { Id: id, id });

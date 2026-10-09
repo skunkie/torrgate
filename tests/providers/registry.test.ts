@@ -102,9 +102,11 @@ describe('ProviderRegistry cached topic path recovery', () => {
     const sharedStore = getTopicPathStore(cache);
     await sharedStore.clear();
     const writeMock = context.mock.method(sharedStore, 'setMany');
+    const pathWrites = context.mock.method(sharedStore, 'set');
     await registry.restoreTopicPaths(topicPaths);
     assert.equal(writeMock.mock.callCount(), 1);
     assert.deepEqual(writeMock.mock.calls[0].arguments, [entries, 600]);
+    assert.equal(pathWrites.mock.callCount(), entries.length);
     for (const { key, value } of entries) assert.equal(await sharedStore.get(key), value);
   });
 });

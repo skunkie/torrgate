@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 
 import { MemoryCache } from '../../src/cache/memory-cache.js';
 import { CacheWrite } from '../../src/cache/store.js';
-import { getTopicPathStore } from '../../src/cache/topic-path-cache.js';
+import { getLocalTopicPathStore, getTopicPathStore } from '../../src/cache/topic-path-cache.js';
+import { UpstashRedisCache } from '../../src/cache/upstash-cache.js';
 import { HttpClient } from '../../src/http/http-client.js';
 import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
@@ -880,6 +881,36 @@ describe('CardigannProvider shared topic paths', () => {
       : '<h1>Sample Topic</h1>';
     return new CardigannProvider(providerDefinition, httpClient);
   }
+
+  it('should keep topic paths in a single memory store with one write per path', async context => {
+    const cache = new MemoryCache<unknown>();
+    const sharedStore = getLocalTopicPathStore(cache);
+    const writes = context.mock.method(sharedStore, 'set');
+    const provider = createProvider();
+    provider.shareTopicPaths(cache, 'sample-namespace', 300);
+    const [item] = await provider.searchByTitle({ query: 'Sample' });
+    assert.equal(writes.mock.callCount(), 1);
+    assert.equal((await provider.getTopicDetails(item.id))?.url, item.url);
+    sharedStore.clear();
+    assert.equal((await provider.getTopicDetails(item.id))?.url, 'https://tracker.example/viewtopic.php?t=42');
+  });
+
+  it('should share the local Redis topic-path budget across providers', async context => {
+    const cache = new UpstashRedisCache('https://redis.example', 'test-token');
+    const remoteTopicPaths = new MemoryCache<unknown>();
+    const stores = context.mock.method(cache, 'createHashStore', () => remoteTopicPaths);
+    const first = createProvider();
+    first.shareTopicPaths(cache, 'sample-namespace', 300);
+    const [item] = await first.searchByTitle({ query: 'Sample' });
+    remoteTopicPaths.clear();
+    const second = createProvider();
+    second.shareTopicPaths(cache, 'sample-namespace', 300);
+    assert.equal(stores.mock.callCount(), 2);
+    assert.equal((await second.getTopicDetails(item.id))?.url, item.url);
+    getLocalTopicPathStore(cache).clear();
+    assert.equal((await second.getTopicDetails(item.id))?.url, 'https://tracker.example/viewtopic.php?t=42');
+    assert.equal((await first.getTopicDetails(item.id))?.url, 'https://tracker.example/viewtopic.php?t=42');
+  });
 
   it('should await shared storage and preserve paths throughout the configured search cache lifetime', async () => {
     const store = new MemoryCache<unknown>(300);

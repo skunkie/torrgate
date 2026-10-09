@@ -7,7 +7,8 @@ import { describe, it } from 'node:test';
 
 import { MemoryCache } from '../../src/cache/memory-cache.js';
 import { BatchCacheStore, buildCacheKey } from '../../src/cache/store.js';
-import { getTopicPathStore } from '../../src/cache/topic-path-cache.js';
+import { createTopicPathCache, getLocalTopicPathStore, getTopicPathStore } from '../../src/cache/topic-path-cache.js';
+import { UpstashRedisCache } from '../../src/cache/upstash-cache.js';
 
 describe('buildCacheKey', () => {
   it('should distinguish fields containing the separator character', () => {
@@ -239,8 +240,63 @@ describe('Topic path storage', () => {
     assert.equal(cache.size, 2);
     assert.equal(cache.get('first-search'), 'First Sample Response');
     assert.equal(topicPaths.get('topic-0'), './forum/viewtopic.php?t=0');
-    topicPaths.set('oversized-topic', 'x'.repeat(65 * 1024 * 1024));
+    topicPaths.set('oversized-topic', 'x'.repeat(5 * 1024 * 1024));
     assert.equal(topicPaths.get('oversized-topic'), undefined);
-    assert.ok(topicPaths.sizeBytes <= 64 * 1024 * 1024);
+    assert.ok(topicPaths.sizeBytes <= 4 * 1024 * 1024);
+  });
+
+  it('should share one local store per backend for memory and Redis providers', () => {
+    const memory = new MemoryCache<unknown>();
+    assert.equal(getLocalTopicPathStore(memory), getTopicPathStore(memory));
+    const redis = new UpstashRedisCache('https://redis.example', 'test-token');
+    const local = getLocalTopicPathStore(redis);
+    assert.equal(getLocalTopicPathStore(redis), local);
+    assert.notEqual(getLocalTopicPathStore(memory), local);
+    assert.notEqual(getLocalTopicPathStore(new UpstashRedisCache('https://redis.example', 'test-token')), local);
+  });
+
+  it('should evict least recently used topic paths within the shared memory budget', () => {
+    const cache = getLocalTopicPathStore(new MemoryCache<unknown>());
+    const value = `./${'x'.repeat(1024 * 1024)}`;
+    cache.set('first', value);
+    cache.set('second', value);
+    cache.set('third', value);
+    cache.get('first');
+    cache.set('fourth', value);
+    assert.equal(cache.get('second'), undefined);
+    assert.equal(cache.get('first'), value);
+    assert.equal(cache.get('third'), value);
+    assert.equal(cache.get('fourth'), value);
+    assert.ok(cache.sizeBytes <= 4 * 1024 * 1024);
+  });
+
+  it('should reclaim expired paths during idle periods below the memory budget', context => {
+    context.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 1_000 });
+    const cache = getLocalTopicPathStore(new MemoryCache<unknown>());
+    try {
+      cache.set('expired', './sample/topic', 1);
+      cache.set('live', './sample/other-topic', 120);
+      context.mock.timers.tick(60_000);
+      assert.equal(cache.size, 1);
+      assert.equal(cache.sizeBytes, Buffer.byteLength('live./sample/other-topic'));
+      assert.equal(cache.get('live'), './sample/other-topic');
+    } finally {
+      cache.destroy();
+    }
+  });
+
+  it('should bound and clean standalone topic-path caches', context => {
+    context.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 1_000 });
+    const cache = createTopicPathCache();
+    try {
+      cache.set('oversized', 'x'.repeat(5 * 1024 * 1024));
+      assert.equal(cache.size, 0);
+      cache.set('expired', './sample/topic', 1);
+      context.mock.timers.tick(60_000);
+      assert.equal(cache.size, 0);
+      assert.equal(cache.sizeBytes, 0);
+    } finally {
+      cache.destroy();
+    }
   });
 });

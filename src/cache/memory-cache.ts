@@ -17,6 +17,21 @@ function estimateSizeBytes(key: string, value: unknown): number {
   return Buffer.byteLength(key) + Buffer.byteLength(serialized);
 }
 
+/** Background cleanup must not keep an unused cache alive. */
+function startCleanup<T>(cache: MemoryCache<T>, intervalSeconds: number): NodeJS.Timeout {
+  const reference = new WeakRef(cache);
+  const timer = setInterval(() => {
+    const target = reference.deref();
+    if (target) {
+      target.evictExpired();
+    } else {
+      clearInterval(timer);
+    }
+  }, intervalSeconds * 1000);
+  timer.unref();
+  return timer;
+}
+
 /**
  * In-memory TTL cache with LRU eviction, bounded by both entry count and approximate size.
  * A value larger than the whole size budget is not stored.
@@ -39,10 +54,7 @@ export class MemoryCache<T> implements BatchCacheStore<T> {
     this.maxEntries = maxEntries;
     this.maxSizeBytes = maxSizeBytes;
     if (cleanupIntervalSeconds > 0) {
-      this.cleanupTimer = setInterval(() => {
-        this.evictExpired();
-      }, cleanupIntervalSeconds * 1000);
-      this.cleanupTimer.unref?.();
+      this.cleanupTimer = startCleanup(this, cleanupIntervalSeconds);
     }
   }
 
