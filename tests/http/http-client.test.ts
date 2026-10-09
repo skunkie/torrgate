@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { after, before, describe, it } from 'node:test';
 
+import { AxiosAdapter } from 'axios';
+
 import { HttpClient, mergeCookieHeader } from '../../src/http/http-client.js';
 
 describe('HttpClient', () => {
@@ -243,5 +245,40 @@ describe('mergeCookieHeader', () => {
       mergeCookieHeader('a=1; b=2', ['b=3; Path=/', 'c=4; HttpOnly', 'a=; Max-Age=0']),
       'b=3; c=4'
     );
+  });
+});
+
+describe('HttpClient concurrency configuration', () => {
+  it('should share the configured limit across text, binary and decoded requests', async () => {
+    const httpClient = new HttpClient(undefined, 10000, 2);
+    let activeRequests = 0;
+    let peakRequests = 0;
+    const adapter: AxiosAdapter = async config => {
+      activeRequests++;
+      peakRequests = Math.max(peakRequests, activeRequests);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      activeRequests--;
+      return {
+        config,
+        data: Buffer.from('Sample response'),
+        headers: {},
+        status: 200,
+        statusText: 'OK',
+      };
+    };
+
+    const responses = await Promise.all([
+      httpClient.get('https://first.example/text', { adapter }),
+      httpClient.getBinary('https://second.example/torrent', { adapter }),
+      httpClient.requestDecoded('https://third.example/page', { adapter }),
+      httpClient.get('https://fourth.example/text', { adapter }),
+    ]);
+    assert.equal(responses.length, 4);
+    assert.equal(peakRequests, 2);
+    assert.equal(activeRequests, 0);
+  });
+
+  it('should reject an invalid limit when constructed directly', () => {
+    assert.throws(() => new HttpClient(undefined, 10000, 0), /positive safe integer/);
   });
 });

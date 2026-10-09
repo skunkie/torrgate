@@ -8,6 +8,12 @@ import { describe, it } from 'node:test';
 import { ConcurrencyLimiter } from '../../src/http/concurrency-limiter.js';
 
 describe('ConcurrencyLimiter Utility', () => {
+  it('should reject limits that cannot schedule tasks safely', () => {
+    for (const limit of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.throws(() => new ConcurrencyLimiter(limit), /positive safe integer/);
+    }
+  });
+
   it('should restrict concurrency to the configured limit', async () => {
     const limiter = new ConcurrencyLimiter(2);
     let activeTasks = 0;

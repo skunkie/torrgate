@@ -28,6 +28,7 @@ describe('Server Configuration Loader', () => {
     delete process.env.https_proxy;
     delete process.env.KV_REST_API_TOKEN;
     delete process.env.KV_REST_API_URL;
+    delete process.env.MAX_CONCURRENT_REQUESTS;
     delete process.env.PORT;
     delete process.env.REQUEST_TIMEOUT_MS;
     delete process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -42,6 +43,7 @@ describe('Server Configuration Loader', () => {
     const config = loadConfig();
     assert.equal(config.host, '0.0.0.0');
     assert.equal(config.port, 8443);
+    assert.equal(config.maxConcurrentRequests, 10);
     assert.equal(config.cacheTtlSeconds, 300);
     assert.equal(config.corsOrigin, undefined);
     assert.equal(config.requestTimeoutMs, 10000);
@@ -49,6 +51,29 @@ describe('Server Configuration Loader', () => {
     assert.equal(config.kvRestApiToken, undefined);
     assert.equal(config.kvRestApiUrl, undefined);
     assert.equal(config.proxy, undefined);
+  });
+
+  it('should load the upstream concurrency limit from the environment', () => {
+    process.env.MAX_CONCURRENT_REQUESTS = '3';
+    assert.equal(loadConfig().maxConcurrentRequests, 3);
+  });
+
+  it('should let the concurrency CLI option override the environment', () => {
+    const originalArgs = process.argv;
+    process.env.MAX_CONCURRENT_REQUESTS = '3';
+    try {
+      process.argv = ['node', 'torrgate', '--maxConcurrentRequests', '2'];
+      assert.equal(loadConfig().maxConcurrentRequests, 2);
+    } finally {
+      process.argv = originalArgs;
+    }
+  });
+
+  it('should reject invalid upstream concurrency limits at startup', () => {
+    for (const value of ['0', '-1', '1.5', 'NaN', 'Infinity', '9007199254740992']) {
+      process.env.MAX_CONCURRENT_REQUESTS = value;
+      assert.throws(() => loadConfig(), /positive safe integer/);
+    }
   });
 
   it('should load and normalize CORS_ORIGIN from the environment', () => {

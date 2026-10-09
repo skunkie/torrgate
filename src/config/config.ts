@@ -141,6 +141,11 @@ export function loadConfig(): ServerConfig {
       description: 'Host address to bind',
       type: 'string',
     })
+    .option('maxConcurrentRequests', {
+      default: process.env.MAX_CONCURRENT_REQUESTS !== undefined ? Number(process.env.MAX_CONCURRENT_REQUESTS) : 10,
+      description: 'Maximum concurrent upstream requests across all trackers',
+      type: 'number',
+    })
     .option('port', {
       alias: 'p',
       default: Number(process.env.PORT) || 8443,
@@ -164,6 +169,10 @@ export function loadConfig(): ServerConfig {
     })
     .parseSync();
 
+  if (!Number.isSafeInteger(argv.maxConcurrentRequests) || argv.maxConcurrentRequests < 1) {
+    throw new Error('MAX_CONCURRENT_REQUESTS must be a positive safe integer');
+  }
+
   const kvRestApiToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || undefined;
   const kvRestApiUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || undefined;
 
@@ -174,6 +183,7 @@ export function loadConfig(): ServerConfig {
     host: argv.host,
     kvRestApiToken,
     kvRestApiUrl,
+    maxConcurrentRequests: argv.maxConcurrentRequests,
     port: argv.port,
     requestTimeoutMs: argv.timeout,
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY),

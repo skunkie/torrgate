@@ -104,9 +104,10 @@ export interface DecodedResponse {
  */
 export class HttpClient {
   private readonly client: AxiosInstance;
-  private readonly limiter = new ConcurrencyLimiter(10);
+  private readonly limiter: ConcurrencyLimiter;
 
-  constructor(proxyConfig?: ProxyConfig, timeoutMs: number = 10000) {
+  constructor(proxyConfig?: ProxyConfig, timeoutMs: number = 10000, maxConcurrentRequests: number = 10) {
+    this.limiter = new ConcurrencyLimiter(maxConcurrentRequests);
     const config: AxiosRequestConfig = {
       headers: {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',

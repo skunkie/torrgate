@@ -11,6 +11,9 @@ export class ConcurrencyLimiter {
   private readonly queue: Array<() => void> = [];
 
   constructor(maxConcurrency = 5) {
+    if (!Number.isSafeInteger(maxConcurrency) || maxConcurrency < 1) {
+      throw new RangeError('Concurrency limit must be a positive safe integer');
+    }
     this.maxConcurrency = maxConcurrency;
   }
 

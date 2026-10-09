@@ -23,6 +23,7 @@ export interface ServerConfig {
   host: string;
   kvRestApiToken?: string;
   kvRestApiUrl?: string;
+  maxConcurrentRequests?: number;
   port: number;
   proxy?: ProxyConfig;
   requestTimeoutMs: number;

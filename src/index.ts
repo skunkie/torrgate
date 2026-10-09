@@ -87,7 +87,7 @@ export function buildApp(): express.Application {
   if (unprotectedAccountWarning) {
     console.warn(unprotectedAccountWarning);
   }
-  const httpClient = new HttpClient(config.proxy, config.requestTimeoutMs);
+  const httpClient = new HttpClient(config.proxy, config.requestTimeoutMs, config.maxConcurrentRequests);
   const registry = new ProviderRegistry(httpClient);
   const cache = createCacheFromConfig(config);
   if (cache instanceof UpstashRedisCache) {

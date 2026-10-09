@@ -92,6 +92,7 @@ TorrGate can be configured via environment variables or a `.env` file:
 | `HTTPS_PROXY` | *(none)* | Outbound HTTPS proxy URL (e.g. `http://user:pass@proxy.example.com:8080`). Only `http://` and `https://` proxies are supported; HTTPS sites are tunnelled with `CONNECT` and plain-HTTP sites are forwarded as ordinary proxy requests |
 | `KV_REST_API_TOKEN` | *(none)* | Upstash Redis REST token for persistent serverless cache; also holds tracker request delays across serverless instances |
 | `KV_REST_API_URL` | *(none)* | Upstash Redis REST URL (e.g. `https://your-db.upstash.io`) |
+| `MAX_CONCURRENT_REQUESTS` | `10` | Positive integer limit for concurrent upstream requests shared across all trackers in each application instance. CLI `--maxConcurrentRequests` overrides this value |
 | `PORT` | `8443` | Server port number |
 | `REQUEST_TIMEOUT_MS` | `10000` | HTTP request timeout in milliseconds |
 | `TORRGATE_<ID>_COOKIE` | *(none)* | Session cookies for semi-private trackers (e.g. `TORRGATE_SAMPLE_TRACKER_ORG_COOKIE`) |
