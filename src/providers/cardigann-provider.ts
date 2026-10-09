@@ -113,6 +113,9 @@ export class CardigannProvider implements TrackerProvider {
     this.requestThrottle?.shareSlot(store, `request-slot:${this.id}`);
   }
 
+  /**
+   * Shares mirror-relative topic paths across instances with deployment and definition isolation.
+   */
   shareTopicPaths(store: CacheStore, namespace: string, cacheTtlSeconds: number): void {
     this.sharedTopicPaths = getTopicPathStore(store);
     this.topicPathScope = createHash('sha256')
@@ -126,6 +129,9 @@ export class CardigannProvider implements TrackerProvider {
     return buildCacheKey('topic-path', [this.topicPathScope, this.id, id]);
   }
 
+  /**
+   * Returns the topic-path entry recorded for this result by the search that produced it.
+   */
   getTopicPathCacheEntry(item: TorrentItem): CacheWrite<string> | undefined {
     return this.searchTopicPaths.get(item);
   }

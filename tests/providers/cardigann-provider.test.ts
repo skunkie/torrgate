@@ -475,6 +475,8 @@ describe('CardigannProvider Execution', () => {
     { hrefPrefix: './viewtopic.php?t=', topicUrl: 'https://example.org/forum/viewtopic.php?t=42' },
     { hrefPrefix: '/viewtopic.php?t=', topicUrl: 'https://example.org/viewtopic.php?t=42' },
     { hrefPrefix: '../viewtopic.php?t=', topicUrl: 'https://example.org/viewtopic.php?t=42' },
+    { hrefPrefix: '//example.org/forum/viewtopic.php?t=', topicUrl: 'https://example.org/forum/viewtopic.php?t=42' },
+    { hrefPrefix: 'https://example.org/forum/viewtopic.php?t=', topicUrl: 'https://example.org/forum/viewtopic.php?t=42' },
   ]) {
     it(`should resolve inferred ${hrefPrefix} topic links against the search page directory`, async () => {
       const httpClient = new HttpClient();
@@ -498,8 +500,16 @@ describe('CardigannProvider Execution', () => {
         },
       }, httpClient);
 
+      const cache = new MemoryCache<unknown>();
+      provider.shareTopicPaths(cache, 'sample-topic-paths', 300);
       const [result] = await provider.searchByTitle({ query: 'Sample' });
       assert.equal(result.url, topicUrl);
+      const entry = provider.getTopicPathCacheEntry(result);
+      assert.ok(entry);
+      const expectedUrl = new URL(topicUrl);
+      const expectedPath = `.${expectedUrl.pathname}${expectedUrl.search}`;
+      assert.equal(entry.value, expectedPath);
+      assert.equal(getTopicPathStore(cache).get(entry.key), expectedPath);
       const details = await provider.getTopicDetails(result.id);
       assert.ok(details);
       assert.equal(requestedUrls[1], topicUrl);

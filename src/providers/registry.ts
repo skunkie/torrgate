@@ -140,6 +140,9 @@ export class ProviderRegistry {
     await this.sharedTopicPaths?.setMany(restoredEntries, this.topicPathTtlSeconds);
   }
 
+  /**
+   * Configures shared topic-path storage and its lifetime for every Cardigann provider.
+   */
   shareTopicPaths(store: CacheStore, namespace: string, cacheTtlSeconds: number): void {
     this.sharedTopicPaths = getTopicPathStore(store);
     this.topicPathTtlSeconds = cacheTtlSeconds + 300;

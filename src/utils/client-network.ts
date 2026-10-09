@@ -4,6 +4,10 @@
 
 import { isIP } from 'node:net';
 
+/**
+ * Groups IPv6 clients by /64 for throttling and treats IPv4-mapped addresses as IPv4
+ * clients. Other address strings are preserved.
+ */
 export function getClientNetwork(address: string): string {
   if (isIP(address) !== 6) return address;
   const normalized = new URL(`http://[${address.split('%')[0]}]/`).hostname.slice(1, -1);

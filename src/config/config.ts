@@ -97,6 +97,10 @@ export function getUnprotectedAccountWarning(
   );
 }
 
+/**
+ * Parses a CORS setting as `*` or a normalized HTTP(S) origin, rejecting credentials
+ * and non-origin URL components. Empty settings return `undefined`.
+ */
 export function parseCorsOrigin(value: string | undefined): string | undefined {
   const raw = value?.trim();
   if (!raw) return undefined;
