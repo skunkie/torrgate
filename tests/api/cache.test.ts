@@ -177,6 +177,51 @@ describe('API Search and RSS Caching Integration', () => {
     assert.equal(topicCallCount, 1);
   });
 
+  it('should partition cached topic details by response origin', async () => {
+    const url = `${baseUrl}/api/v2.0/indexers/rutor/details/45678`;
+    const first = await requestWithHost(url, 'first.example');
+    assert.equal(first.status, 200);
+    assert.equal(first.cacheStatus, 'MISS');
+
+    const second = await requestWithHost(url, 'second.example');
+    assert.equal(second.status, 200);
+    assert.equal(second.cacheStatus, 'MISS');
+
+    const repeated = await requestWithHost(url, 'second.example');
+    assert.equal(repeated.cacheStatus, 'HIT');
+  });
+
+  it('should isolate topic details for public apps and apps with different configured keys sharing a cache', async () => {
+    const sharedCache = new MemoryCache<unknown>(300);
+    for (const apiKey of ['first-sample-key', undefined, 'second-sample-key']) {
+      const registry = new ProviderRegistry(new HttpClient());
+      const provider = registry.getProvider('rutor');
+      assert.ok(provider);
+      let lookupCount = 0;
+      const expectedDetails = { ...sampleDetails, name: apiKey ? `Sample Topic ${apiKey}` : 'Public Sample Topic' };
+      provider.getTopicDetails = async () => {
+        lookupCount++;
+        return expectedDetails;
+      };
+      const testServer = http.createServer(createApp(registry, { apiKey, cache: sharedCache }));
+      await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+      try {
+        const port = (testServer.address() as { port: number }).port;
+        const keyParam = apiKey ? `?apikey=${apiKey}` : '';
+        const url = `http://127.0.0.1:${port}/api/v2.0/indexers/rutor/details/42${keyParam}`;
+        for (const expectedCacheStatus of ['MISS', 'HIT']) {
+          const response = await requestWithHost(url, 'shared.example');
+          assert.equal(response.status, 200);
+          assert.equal(response.cacheStatus, expectedCacheStatus);
+          assert.deepEqual(JSON.parse(response.body), [expectedDetails]);
+        }
+        assert.equal(lookupCount, 1);
+      } finally {
+        await new Promise<void>(resolve => testServer.close(() => resolve()));
+      }
+    }
+  });
+
   it('should cache Torznab RSS feeds and serve second request from cache', async () => {
     // 1. Initial request (Cache Miss)
     const resFirst = await fetch(`${baseUrl}/api/v2.0/indexers/rutor/results/torznab/api?t=search&q=SampleRss`);

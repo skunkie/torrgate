@@ -150,8 +150,14 @@ export class SearchController {
         return;
       }
 
-      const cacheKey = `details:${indexerParam}:${topicId}`;
       const effectiveApiKey = getProvidedApiKey(req) || this.configuredApiKey;
+      const origin = `${req.protocol}://${req.get('host') || ''}`;
+      const cacheKey = buildCacheKey('details', [
+        origin,
+        indexerParam,
+        topicId,
+        hashApiKey(this.configuredApiKey),
+      ]);
 
       if (this.cache && this.cacheTtlSeconds > 0) {
         const cached = (await this.cache.get(cacheKey)) as TorrentItem[] | undefined;
