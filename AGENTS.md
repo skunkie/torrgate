@@ -175,6 +175,7 @@ feat(providers): add resilient date parser for rutor listings
 
 ## Code Comments & Documentation
 
+- Use American English spelling and usage consistently in documentation, prose, and code comments (e.g., "behavior", "color", "normalize", and "serialize"). Preserve proper names, quoted text, external API identifiers, and intentionally non-English sample data.
 - Default to no comments. Only add one when the *why* is genuinely non-obvious: a hidden constraint, a subtle invariant, or behavior that would otherwise surprise a reader.
 - **A declaration's explanation goes above it, not inside it**: a comment that explains what a function, type, or test is for belongs on the line before `function`, `class`, or `interface` as its doc comment; a comment inside the body belongs to the statement it sits above.
 - Do not narrate bug history in comments — no references to a specific error message, a prior regression, "this used to crash", or how an issue was found and fixed. That narrative belongs in the commit message, not the source.
