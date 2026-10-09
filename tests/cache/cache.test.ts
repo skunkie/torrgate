@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 
 import { MemoryCache } from '../../src/cache/memory-cache.js';
 import { buildCacheKey } from '../../src/cache/store.js';
@@ -176,5 +176,54 @@ describe('MemoryCache size budget', () => {
     assert.equal(cache.sizeBytes, Buffer.byteLength('key') + 10);
     cache.delete('key');
     assert.equal(cache.sizeBytes, 0);
+  });
+});
+
+describe('MemoryCache dependencies', () => {
+  it('should return dependent values while all required keys are present', () => {
+    const cache = new MemoryCache<string>(300);
+    cache.set('topic', 'sample-path');
+    cache.set('search', 'sample-response', 300, ['topic', 'topic']);
+
+    assert.equal(cache.get('search'), 'sample-response');
+    cache.delete('topic');
+    assert.equal(cache.get('search'), undefined);
+    assert.equal(cache.size, 0);
+    assert.equal(cache.sizeBytes, 0);
+  });
+
+  it('should invalidate dependent values after LRU eviction of a required key', () => {
+    const cache = new MemoryCache<string>(300, 3);
+    cache.set('topic', 'sample-path');
+    cache.set('search', 'sample-response', 300, ['topic']);
+    cache.set('other-topic', 'another-path');
+    cache.set('another-search', 'another-response');
+
+    assert.equal(cache.get('search'), undefined);
+    assert.equal(cache.get('another-search'), 'another-response');
+  });
+
+  it('should invalidate dependent values when a required key expires', () => {
+    mock.timers.enable({ apis: ['Date'], now: 1_000 });
+    try {
+      const cache = new MemoryCache<string>(300);
+      cache.set('topic', 'sample-path', 1);
+      cache.set('search', 'sample-response', 300, ['topic']);
+      mock.timers.tick(1_001);
+
+      assert.equal(cache.get('search'), undefined);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  it('should include dependency metadata in the byte budget', () => {
+    const cache = new MemoryCache<string>(300, 10, 0, 40);
+    cache.set('topic', 'path');
+    cache.set('search', 'response', 300, ['topic'.repeat(10)]);
+
+    assert.equal(cache.get('search'), undefined);
+    assert.equal(cache.get('topic'), 'path');
+    assert.ok(cache.sizeBytes <= 40);
   });
 });

@@ -15,7 +15,7 @@ const loginPageHtml = '<html><body><form action="/login"><input name="username">
 
 const resultsHtml = `
   <html><body><table>
-    <tr class="row"><td class="title"><a href="/details/1">Example Release 2026</a></td></tr>
+    <tr class="row"><td class="title"><a href="/details.php?id=1">Example Release 2026</a></td></tr>
   </table></body></html>
 `;
 

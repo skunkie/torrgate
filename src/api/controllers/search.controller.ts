@@ -309,7 +309,7 @@ export class SearchController {
       const effectiveApiKey = getProvidedApiKey(req) || this.configuredApiKey;
       const origin = `${req.protocol}://${req.get('host') || ''}`;
 
-      const cacheKey = buildCacheKey('search', [
+      const cacheKey = buildCacheKey('search:v2', [
         origin,
         indexerParam,
         query,
@@ -337,6 +337,7 @@ export class SearchController {
         const allResults: JackettResultItem[] = [];
         const indexerStatuses: JackettIndexerStatus[] = [];
         const elapsedTime = Date.now() - startTime;
+        const topicPathDependencies: string[] = [];
         let errors: Record<string, string>;
 
         if (isWindowRequested) {
@@ -355,6 +356,8 @@ export class SearchController {
           errors = outcome.errors;
           const resultCounts = new Map(providers.map(provider => [provider, 0]));
           for (const { item, provider } of outcome.results) {
+            const topicPathKey = provider.getTopicPathCacheKey?.(item);
+            if (topicPathKey) topicPathDependencies.push(topicPathKey);
             const providerId = (provider.id || provider.name).toLowerCase();
             resultCounts.set(provider, (resultCounts.get(provider) ?? 0) + 1);
             allResults.push(
@@ -399,6 +402,8 @@ export class SearchController {
 
             const mappings = provider ? getCategoryMappings(provider) : [];
             for (const item of items) {
+              const topicPathKey = provider?.getTopicPathCacheKey?.(item);
+              if (topicPathKey) topicPathDependencies.push(topicPathKey);
               allResults.push(
                 toJackettResultItem(
                   item,
@@ -421,7 +426,7 @@ export class SearchController {
         const hasErrors = Object.keys(errors).length > 0;
 
         if (this.cache && this.cacheTtlSeconds > 0 && !hasErrors) {
-          await this.cache.set(cacheKey, response, this.cacheTtlSeconds);
+          await this.cache.set(cacheKey, response, this.cacheTtlSeconds, topicPathDependencies);
         }
 
         setSearchCacheHeaders(res, 'MISS', this.cachePolicy(effectiveApiKey, hasErrors));
@@ -496,7 +501,9 @@ export class SearchController {
       };
 
       if (this.cache && this.cacheTtlSeconds > 0) {
-        await this.cache.set(cacheKey, response, this.cacheTtlSeconds);
+        const dependencies = items.map(item => provider.getTopicPathCacheKey?.(item))
+          .filter((key): key is string => key !== undefined);
+        await this.cache.set(cacheKey, response, this.cacheTtlSeconds, dependencies);
       }
 
       setSearchCacheHeaders(res, 'MISS', this.cachePolicy(effectiveApiKey));

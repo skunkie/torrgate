@@ -94,7 +94,7 @@ export class RssController {
       const effectiveApiKey = getProvidedApiKey(req) || this.configuredApiKey;
       const origin = `${req.protocol}://${req.get('host') || ''}`;
 
-      const cacheKey = buildCacheKey('rss', [
+      const cacheKey = buildCacheKey('rss:v2', [
         origin,
         indexerParam,
         t,
@@ -161,7 +161,9 @@ export class RssController {
       });
 
       if (this.cache && this.cacheTtlSeconds > 0 && !hasErrors) {
-        await this.cache.set(cacheKey, xml, this.cacheTtlSeconds);
+        const dependencies = outcome.results.map(({ item, provider }) => provider.getTopicPathCacheKey?.(item))
+          .filter((key): key is string => key !== undefined);
+        await this.cache.set(cacheKey, xml, this.cacheTtlSeconds, dependencies);
       }
 
       setSearchCacheHeaders(res, 'MISS', this.cachePolicy(effectiveApiKey, hasErrors));

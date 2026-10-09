@@ -5,13 +5,14 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import path from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { after, before, describe, it, mock } from 'node:test';
 
 import iconv from 'iconv-lite';
 
 import { HttpClient } from '../../src/http/http-client.js';
 import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
 import { loadDefinitionsFromDir } from '../../src/providers/loader.js';
+import { parseToIsoString } from '../../src/utils/date.js';
 import { testBigFanGroupSearchHtml } from '../fixtures/bigfangroup.fixture.js';
 import { testKinozalSearchHtml } from '../fixtures/kinozal.fixture.js';
 import { testMegaPeerSearchHtml } from '../fixtures/megapeer.fixture.js';
@@ -262,6 +263,45 @@ describe('Jackett Cardigann Definitions Compatibility', () => {
     assert.match(results[0].name, /Тестовый Сериал \/ Test Serial S1E2/);
     assert.equal(results[0].seeders, 1);
     assert.equal(results[0].leechers, 1);
+    assert.equal(parseToIsoString(results[0].date), '2024-08-15T11:30:00.000Z');
+  });
+
+  it('should fetch NewStudio details from the topic path used by its search results', async () => {
+    const definition = providers.find(provider => provider.id === 'newstudio')!.definition;
+    const httpClient = new HttpClient();
+    let requestedUrl = '';
+    httpClient.getDecoded = async url => {
+      requestedUrl = url;
+      return '<h1>Sample Show S01E02</h1>';
+    };
+    const provider = new CardigannProvider(definition, httpClient);
+
+    const details = await provider.getTopicDetails('700001');
+    assert.ok(details);
+    assert.equal(requestedUrl, 'https://newstudio.tv/viewtopic.php?t=700001');
+    assert.equal(details.url, requestedUrl);
+  });
+
+  it('should preserve NewStudio absolute dates alongside Russian and English relative labels', async () => {
+    const definition = providers.find(provider => provider.id === 'newstudio')!.definition;
+    mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-22T22:30:00Z') });
+    try {
+      for (const [sampleDate, expectedDate] of [
+        ['16-Ноя-17, Сегодня 12:34', '2017-11-16T09:34:00.000Z'],
+        ['15-Ноя-17, Вчера 12:40', '2017-11-15T09:40:00.000Z'],
+        ['16-Nov-17, Today 01:34', '2017-11-15T22:34:00.000Z'],
+        ['15-Nov-17, Yesterday 17:20', '2017-11-15T14:20:00.000Z'],
+        ['4-Nov-17, 23:50', '2017-11-04T20:50:00.000Z'],
+      ]) {
+        const httpClient = new HttpClient();
+        httpClient.getDecoded = async () => testNewStudioSearchHtml.replace('15-Авг-24 14:30', sampleDate);
+        const provider = new CardigannProvider({ ...definition, requestDelay: undefined }, httpClient);
+        const results = await provider.searchByTitle({ query: 'Sample' });
+        assert.equal(parseToIsoString(results[0].date), expectedDate);
+      }
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   it('should parse torrent.by search results and extract direct magnet link', async () => {

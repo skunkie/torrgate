@@ -81,6 +81,7 @@ export interface TrackerProvider {
   /** Fetches a .torrent file from one of the tracker's hosts, rejecting non-torrent responses. */
   downloadTorrent(url: string): Promise<TorrentDownload>;
   getTopicDetails(id: string): Promise<TopicDetails | null>;
+  getTopicPathCacheKey?(item: TorrentItem): string | undefined;
   readonly id?: string;
   readonly name: ProviderName;
   searchByTitle(options: SearchOptions): Promise<TorrentItem[]>;

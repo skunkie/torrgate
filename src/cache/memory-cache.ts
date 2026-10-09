@@ -5,6 +5,7 @@
 import { CacheStore } from './store.js';
 
 interface CacheEntry<T> {
+  dependencies: readonly string[];
   expiresAt: number;
   sizeBytes: number;
   value: T;
@@ -97,6 +98,14 @@ export class MemoryCache<T> implements CacheStore<T> {
       return undefined;
     }
 
+    if (entry.dependencies.some(dependency => {
+      const requiredEntry = this.store.get(dependency);
+      return !requiredEntry || Date.now() > requiredEntry.expiresAt;
+    })) {
+      this.delete(key);
+      return undefined;
+    }
+
     // Refresh position for LRU eviction
     this.store.delete(key);
     this.store.set(key, entry);
@@ -107,14 +116,16 @@ export class MemoryCache<T> implements CacheStore<T> {
     return this.get(key) !== undefined;
   }
 
-  set(key: string, value: T, ttlSeconds?: number): void {
+  set(key: string, value: T, ttlSeconds?: number, dependencies: readonly string[] = []): void {
     const effectiveTtl = ttlSeconds !== undefined ? ttlSeconds : this.defaultTtlSeconds;
     if (effectiveTtl <= 0) {
       return;
     }
 
     this.delete(key);
-    const sizeBytes = estimateSizeBytes(key, value);
+    const requiredKeys = [...new Set(dependencies)];
+    const sizeBytes = estimateSizeBytes(key, value)
+      + (requiredKeys.length > 0 ? Buffer.byteLength(JSON.stringify(requiredKeys)) : 0);
     if (sizeBytes > this.maxSizeBytes) {
       return;
     }
@@ -134,6 +145,7 @@ export class MemoryCache<T> implements CacheStore<T> {
     }
 
     this.store.set(key, {
+      dependencies: requiredKeys,
       expiresAt: Date.now() + effectiveTtl * 1000,
       sizeBytes,
       value,

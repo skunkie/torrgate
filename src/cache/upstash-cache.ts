@@ -12,6 +12,20 @@ import { CacheStore } from './store.js';
 const CLAIM_SLOT_SCRIPT = `if redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end
 return math.max(redis.call('PTTL', KEYS[1]), 1)`;
 
+interface DependentCacheEntry {
+  cacheEntryVersion: 1;
+  dependencies: string[];
+  value: unknown;
+}
+
+function isDependentCacheEntry(value: unknown): value is DependentCacheEntry {
+  return typeof value === 'object' && value !== null
+    && 'cacheEntryVersion' in value && value.cacheEntryVersion === 1
+    && 'dependencies' in value && Array.isArray(value.dependencies)
+    && value.dependencies.every(key => typeof key === 'string')
+    && 'value' in value;
+}
+
 /**
  * Persistent Redis cache provider using Upstash HTTP REST API.
  * Serverless-friendly with zero connection pool overhead.
@@ -67,28 +81,43 @@ export class UpstashRedisCache<T = unknown> implements CacheStore<T>, RequestSlo
         return undefined;
       }
 
+      let value: unknown = raw;
       if (typeof raw === 'string') {
         try {
-          return JSON.parse(raw) as R;
+          value = JSON.parse(raw);
         } catch {
           return raw as unknown as R;
         }
       }
 
-      return raw as R;
+      if (isDependentCacheEntry(value)) {
+        if (value.dependencies.length > 0) {
+          const count = await this.sendCommand<number>(['EXISTS', ...value.dependencies]);
+          if (count !== value.dependencies.length) {
+            await this.delete(key);
+            return undefined;
+          }
+        }
+        return value.value as R;
+      }
+      return value as R;
     } catch {
       return undefined;
     }
   }
 
-  async set(key: string, value: T, ttlSeconds?: number): Promise<void> {
+  async set(key: string, value: T, ttlSeconds?: number, dependencies: readonly string[] = []): Promise<void> {
     const effectiveTtl = ttlSeconds !== undefined ? ttlSeconds : this.defaultTtlSeconds;
     if (effectiveTtl <= 0) {
       return;
     }
 
     try {
-      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+      const requiredKeys = [...new Set(dependencies)];
+      const entry: T | DependentCacheEntry = requiredKeys.length > 0
+        ? { cacheEntryVersion: 1, dependencies: requiredKeys, value }
+        : value;
+      const serialized = typeof entry === 'string' ? entry : JSON.stringify(entry);
       await this.sendCommand(['SET', key, serialized, 'EX', Math.floor(effectiveTtl)]);
     } catch {
       // Safe no-throw on cache write failure

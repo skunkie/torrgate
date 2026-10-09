@@ -16,6 +16,7 @@ describe('Upstash Redis Cache Provider', () => {
   let lastHeaders: http.IncomingHttpHeaders | null = null;
   let testResponseStatus = 200;
   let testResponseBody: unknown = { result: 'OK' };
+  let testResponseQueue: unknown[] = [];
   let testServer: http.Server;
   let serverUrl = '';
 
@@ -33,7 +34,7 @@ describe('Upstash Redis Cache Provider', () => {
           lastCommand = body;
         }
         res.writeHead(testResponseStatus, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(testResponseBody));
+        res.end(JSON.stringify(testResponseQueue.length > 0 ? testResponseQueue.shift() : testResponseBody));
       });
     });
 
@@ -57,6 +58,7 @@ describe('Upstash Redis Cache Provider', () => {
     lastHeaders = null;
     testResponseStatus = 200;
     testResponseBody = { result: 'OK' };
+    testResponseQueue = [];
   });
 
   it('should store values using SET command with EX ttl and Authorization header', async () => {
@@ -107,6 +109,40 @@ describe('Upstash Redis Cache Provider', () => {
 
     assert.deepEqual(lastCommand, ['GET', 'sample:key:1']);
     assert.deepEqual(result, samplePayload);
+  });
+
+  it('should store dependency keys with cached responses', async () => {
+    const cache = new UpstashRedisCache(serverUrl, 'test-secret-token');
+    await cache.set('search', 'sample-response', 300, ['topic', 'topic']);
+
+    assert.deepEqual(lastCommand, [
+      'SET', 'search',
+      JSON.stringify({ cacheEntryVersion: 1, dependencies: ['topic'], value: 'sample-response' }),
+      'EX', 300,
+    ]);
+  });
+
+  it('should return the cached response while every dependency exists', async () => {
+    testResponseQueue = [
+      { result: JSON.stringify({ cacheEntryVersion: 1, dependencies: ['first-topic', 'second-topic'], value: 'sample-response' }) },
+      { result: 2 },
+    ];
+    const cache = new UpstashRedisCache(serverUrl, 'test-secret-token');
+
+    assert.equal(await cache.get('search'), 'sample-response');
+    assert.deepEqual(lastCommand, ['EXISTS', 'first-topic', 'second-topic']);
+  });
+
+  it('should invalidate a cached response when a dependency is unavailable', async () => {
+    testResponseQueue = [
+      { result: JSON.stringify({ cacheEntryVersion: 1, dependencies: ['first-topic', 'second-topic'], value: { Results: [] } }) },
+      { result: 1 },
+      { result: 1 },
+    ];
+    const cache = new UpstashRedisCache(serverUrl, 'test-secret-token');
+
+    assert.equal(await cache.get('search'), undefined);
+    assert.deepEqual(lastCommand, ['DEL', 'search']);
   });
 
   it('should return undefined when key does not exist or result is null', async () => {

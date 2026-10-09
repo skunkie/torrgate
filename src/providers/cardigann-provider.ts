@@ -2,9 +2,14 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { createHash } from 'node:crypto';
+import path from 'node:path';
+
 import { AxiosRequestConfig } from 'axios';
 import * as cheerio from 'cheerio';
 
+import { MemoryCache } from '../cache/memory-cache.js';
+import { buildCacheKey, CacheStore } from '../cache/store.js';
 import { BinaryResponse, encodeWin1251QueryParam, HttpClient } from '../http/http-client.js';
 import { RequestSlotStore, RequestThrottle } from '../http/request-throttle.js';
 import {
@@ -67,6 +72,9 @@ export class CardigannProvider implements TrackerProvider {
   readonly supportsPaging: boolean;
   /** IANA time zone in which the tracker displays times without an explicit zone. */
   readonly timeZone: string;
+  private topicPathScope = '';
+  private topicPathTtlSeconds = 300;
+  private topicPaths: CacheStore = new MemoryCache<string>(300, 500, 0, 1024 * 1024);
   readonly type: 'private' | 'public' | 'semi-private';
   readonly urls: string[];
 
@@ -100,6 +108,28 @@ export class CardigannProvider implements TrackerProvider {
    */
   shareRequestDelay(store: RequestSlotStore): void {
     this.requestThrottle?.shareSlot(store, `request-slot:${this.id}`);
+  }
+
+  shareTopicPaths(store: CacheStore, namespace: string, cacheTtlSeconds: number): void {
+    this.topicPaths = store;
+    this.topicPathScope = createHash('sha256')
+      .update(JSON.stringify([namespace, this.definition]))
+      .digest('hex');
+    // Search responses are cached after topic paths, so allow time for the search to finish.
+    this.topicPathTtlSeconds = cacheTtlSeconds + 300;
+  }
+
+  private topicPathKey(id: string): string {
+    return buildCacheKey('topic-path', [this.topicPathScope, this.id, id]);
+  }
+
+  getTopicPathCacheKey(item: TorrentItem): string | undefined {
+    if (this.definition.details?.path) {
+      return undefined;
+    }
+    const mirror = this.urls.find(baseUrl => findMatchingMirror(item.url, [baseUrl])
+      && new URL(item.url).origin === new URL(baseUrl).origin);
+    return mirror ? this.topicPathKey(item.id) : undefined;
   }
 
   /**
@@ -234,13 +264,23 @@ export class CardigannProvider implements TrackerProvider {
    */
   async getTopicDetails(id: string): Promise<TopicDetails | null> {
     try {
+      let searchPath: string | undefined;
       let topicPath: string;
+      const rememberedTopicPath = this.definition.details?.path
+        ? undefined
+        : await this.topicPaths.get<string>(this.topicPathKey(id));
       if (this.definition.details?.path) {
         topicPath = renderTemplate(this.definition.details.path, { Id: id, id });
+      } else if (rememberedTopicPath) {
+        topicPath = rememberedTopicPath;
       } else {
         const detailsSelector = this.definition.search.fields.details?.selector || '';
         if (detailsSelector.includes('viewtopic.php')) {
-          topicPath = `forum/viewtopic.php?t=${id}`;
+          const hrefPrefix = detailsSelector.match(/\[href\^=["']([^"']*viewtopic\.php\?t=)["']\]/)?.[1];
+          topicPath = hrefPrefix ? `${hrefPrefix}${id}` : `forum/viewtopic.php?t=${id}`;
+          if (hrefPrefix) {
+            searchPath = this.definition.search.paths[0]?.path;
+          }
         } else if (detailsSelector.includes('/torrent/')) {
           topicPath = `torrent/${id}`;
         } else {
@@ -248,6 +288,7 @@ export class CardigannProvider implements TrackerProvider {
         }
       }
 
+      const searchContext = searchPath !== undefined ? this.createSearchContext({ query: '' }) : undefined;
       const headers: Record<string, string> = {};
       const cookieHeader = this.sessionManager.getCookieHeader();
       if (cookieHeader) {
@@ -265,7 +306,11 @@ export class CardigannProvider implements TrackerProvider {
               delete headers.Cookie;
             }
           }
-          const topicUrl = resolveSafeUrl(topicPath, baseUrl);
+          const renderedSearchPath = searchPath !== undefined && searchContext
+            ? this.renderSearchPath(searchPath, searchContext, baseUrl)
+            : undefined;
+          const searchUrl = resolveSafeUrl(renderedSearchPath, baseUrl) ?? baseUrl;
+          const topicUrl = resolveSafeUrl(topicPath, searchUrl);
           if (!topicUrl) {
             throw new Error(`Unsafe or invalid topic URL for ${this.name}: ${topicPath}`);
           }
@@ -394,26 +439,7 @@ export class CardigannProvider implements TrackerProvider {
     return undefined;
   }
 
-  /**
-   * Searches topics by title using the Cardigann definition.
-   */
-  async searchByTitle(options: SearchOptions): Promise<TorrentItem[]> {
-    return (await this.searchPageByTitle(options)).items;
-  }
-
-  /**
-   * Searches one tracker page and reports whether the tracker can have a following page.
-   */
-  async searchPageByTitle(options: SearchOptions): Promise<SearchPage> {
-    const pathDef = this.definition.search.paths[0];
-    if (!pathDef) {
-      return { hasMore: false, items: [] };
-    }
-
-    if ((options.page ?? 0) > 0 && !this.supportsPaging) {
-      return { hasMore: false, items: [] };
-    }
-
+  private createSearchContext(options: SearchOptions): TemplateContext {
     const config: Record<string, boolean | number | string> = {};
     if (this.definition.settings) {
       for (const setting of this.definition.settings) {
@@ -436,14 +462,11 @@ export class CardigannProvider implements TrackerProvider {
     const requestedCategories = options.categories ?? [];
     const trackerCategoryIds =
       requestedCategories.length > 0 ? torznabCatToTrackerIds(requestedCategories, mappings) : [];
-    if (requestedCategories.length > 0 && trackerCategoryIds.length === 0) {
-      return { hasMore: false, items: [] };
-    }
     // Definitions take a single category id, so a request spanning several tracker
     // categories searches unfiltered and the results are filtered afterwards.
     const singleCategory = trackerCategoryIds.length === 1 ? trackerCategoryIds[0] : 0;
 
-    const context: TemplateContext = {
+    return {
       Categories: trackerCategoryIds,
       Category: singleCategory,
       Config: config,
@@ -460,18 +483,48 @@ export class CardigannProvider implements TrackerProvider {
         Year: new Date().getFullYear(),
       },
     };
+  }
 
+  private renderSearchPath(path: string, context: TemplateContext, baseUrl: string): string {
+    const keywords = context.Keywords ?? '';
     const encodedKeywords =
       this.encoding === 'windows-1251'
-        ? encodeWin1251QueryParam(processedKeywords, false)
-        : encodeURIComponent(processedKeywords);
+        ? encodeWin1251QueryParam(keywords, false)
+        : encodeURIComponent(keywords);
     const pathContext: TemplateContext = {
       ...context,
+      Config: { ...context.Config, sitelink: baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/` },
       Keywords: encodedKeywords,
       Query: { ...context.Query, Query: encodedKeywords },
     };
 
-    const renderedPath = renderTemplate(pathDef.path, pathContext);
+    return renderTemplate(path, pathContext);
+  }
+
+  /**
+   * Searches topics by title using the Cardigann definition.
+   */
+  async searchByTitle(options: SearchOptions): Promise<TorrentItem[]> {
+    return (await this.searchPageByTitle(options)).items;
+  }
+
+  /**
+   * Searches one tracker page and reports whether the tracker can have a following page.
+   */
+  async searchPageByTitle(options: SearchOptions): Promise<SearchPage> {
+    const pathDef = this.definition.search.paths[0];
+    if (!pathDef) {
+      return { hasMore: false, items: [] };
+    }
+
+    if ((options.page ?? 0) > 0 && !this.supportsPaging) {
+      return { hasMore: false, items: [] };
+    }
+
+    const context = this.createSearchContext(options);
+    if ((options.categories?.length ?? 0) > 0 && !context.Categories?.length) {
+      return { hasMore: false, items: [] };
+    }
     const queryParams: Record<string, string> = {};
 
     const allInputs = {
@@ -526,7 +579,7 @@ export class CardigannProvider implements TrackerProvider {
           }
         }
 
-        const url = new URL(renderedPath, baseUrl);
+        const url = new URL(this.renderSearchPath(pathDef.path, context, baseUrl), baseUrl);
         if (isPost) {
           return url.toString();
         }
@@ -572,7 +625,7 @@ export class CardigannProvider implements TrackerProvider {
       throw new Error(`Tracker ${this.name} returned an error page${searchError ? `: ${searchError}` : ''}`);
     }
 
-    return parseSearchResults($, {
+    const resultPage = parseSearchResults($, {
       context,
       definition: this.definition,
       options,
@@ -580,5 +633,25 @@ export class CardigannProvider implements TrackerProvider {
       timeZone: this.timeZone,
       workingUrl: page.workingUrl,
     });
+    if (!this.definition.details?.path) {
+      const mirrorUrl = new URL(page.baseUrl);
+      const mirrorDirectory = new URL('.', mirrorUrl).pathname;
+      await Promise.all(resultPage.items.map(async item => {
+        const topicUrl = resolveSafeUrl(item.url, page.workingUrl);
+        if (!topicUrl) {
+          return;
+        }
+        const target = new URL(topicUrl);
+        if (target.origin === mirrorUrl.origin) {
+          const relativePath = path.posix.relative(mirrorDirectory, target.pathname);
+          await this.topicPaths.set(
+            this.topicPathKey(item.id),
+            `./${relativePath}${target.search}${target.hash}`,
+            this.topicPathTtlSeconds
+          );
+        }
+      }));
+    }
+    return resultPage;
   }
 }

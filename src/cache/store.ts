@@ -9,7 +9,8 @@ export interface CacheStore<T = unknown> {
   clear(): Promise<void> | void;
   delete(key: string): Promise<boolean> | boolean;
   get<R = T>(key: string): Promise<R | undefined> | R | undefined;
-  set(key: string, value: T, ttlSeconds?: number): Promise<void> | void;
+  /** A value is returned only while all dependency keys exist and have not expired. */
+  set(key: string, value: T, ttlSeconds?: number, dependencies?: readonly string[]): Promise<void> | void;
 }
 
 /**

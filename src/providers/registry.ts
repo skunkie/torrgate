@@ -4,6 +4,7 @@
 
 import path from 'path';
 
+import { CacheStore } from '../cache/store.js';
 import { HttpClient } from '../http/http-client.js';
 import { RequestSlotStore } from '../http/request-throttle.js';
 import {
@@ -121,6 +122,14 @@ export class ProviderRegistry {
     for (const provider of this.getAllProviders()) {
       if (provider instanceof CardigannProvider) {
         provider.shareRequestDelay(store);
+      }
+    }
+  }
+
+  shareTopicPaths(store: CacheStore, namespace: string, cacheTtlSeconds: number): void {
+    for (const provider of this.getAllProviders()) {
+      if (provider instanceof CardigannProvider) {
+        provider.shareTopicPaths(store, namespace, cacheTtlSeconds);
       }
     }
   }

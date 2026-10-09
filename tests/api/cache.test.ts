@@ -9,7 +9,9 @@ import { after, before, describe, it } from 'node:test';
 import { MemoryCache } from '../../src/cache/memory-cache.js';
 import { HttpClient } from '../../src/http/http-client.js';
 import { createApp } from '../../src/index.js';
+import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
+import { CardigannDefinition } from '../../src/providers/types.js';
 import { JackettSearchResponse } from '../../src/types/jackett.js';
 import { TopicDetails, TorrentItem } from '../../src/types/torrent.js';
 
@@ -45,6 +47,147 @@ function requestWithHost(url: string, host: string): Promise<TestHttpResponse> {
     request.on('error', reject);
   });
 }
+
+describe('Shared topic paths', () => {
+  for (const route of [
+    'sampleforum/results?Query=',
+    'all/results?Query=',
+    'all/results?Offset=0&Limit=300&Query=',
+    'sampleforum/results/torznab/api?t=search&limit=300&q=',
+    'all/results/torznab/api?t=search&limit=300&q=',
+  ]) {
+    it(`should refresh ${route} responses when their topic paths are evicted`, async () => {
+      const sharedCache = new MemoryCache<unknown>(300);
+      const definition: CardigannDefinition = {
+        id: 'sampleforum',
+        links: ['https://tracker.example/'],
+        name: 'Sample Forum',
+        search: {
+          fields: {
+            details: { attribute: 'href', selector: 'a[href^="viewtopic.php?t="]' },
+            title: { selector: 'a' },
+          },
+          paths: [{ path: '{{ .Keywords }}/tracker.php' }],
+          rows: { selector: 'tr.item-row' },
+        },
+      };
+      const testServers: http.Server[] = [];
+      const baseUrls: string[] = [];
+      const requestedUrls: string[] = [];
+      try {
+        for (let instance = 0; instance < 2; instance++) {
+          const httpClient = new HttpClient();
+          httpClient.getDecoded = async url => {
+            requestedUrls.push(url);
+            const pathname = new URL(url).pathname;
+            if (pathname.endsWith('/tracker.php')) {
+              const firstId = pathname === '/First/tracker.php' ? 1 : 301;
+              const rows = Array.from({ length: 300 }, (_, offset) =>
+                `<tr class="item-row"><td><a href="viewtopic.php?t=${firstId + offset}">Sample Topic ${firstId + offset}</a></td></tr>`
+              ).join('');
+              return `<table>${rows}</table>`;
+            }
+            return pathname === '/First/viewtopic.php' ? '<h1>Sample Topic</h1>' : '';
+          };
+          const registry = new ProviderRegistry(httpClient, 'tests/fixtures');
+          registry.registerProvider(new CardigannProvider(definition, httpClient));
+          const testServer = http.createServer(createApp(registry, { cache: sharedCache }));
+          testServers.push(testServer);
+          await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+          const port = (testServer.address() as { port: number }).port;
+          baseUrls.push(`http://127.0.0.1:${port}/api/v2.0/indexers`);
+        }
+
+        const search = async (instance: number, query: string) => requestWithHost(`${baseUrls[instance]}/${route}${query}`, 'shared.example');
+        assert.equal((await search(0, 'First')).cacheStatus, 'MISS');
+        assert.equal((await search(0, 'Second')).cacheStatus, 'MISS');
+        const refreshed = await search(1, 'First');
+        assert.equal(refreshed.status, 200);
+        assert.equal(refreshed.cacheStatus, 'MISS');
+        assert.deepEqual(requestedUrls, [
+          'https://tracker.example/First/tracker.php',
+          'https://tracker.example/Second/tracker.php',
+          'https://tracker.example/First/tracker.php',
+        ]);
+        assert.equal((await search(1, 'First')).cacheStatus, 'HIT');
+
+        const details = await requestWithHost(`${baseUrls[1]}/sampleforum/details/1`, 'shared.example');
+        assert.equal(details.status, 200);
+        assert.equal((JSON.parse(details.body) as TopicDetails[])[0].url, 'https://tracker.example/First/viewtopic.php?t=1');
+      } finally {
+        await Promise.all(testServers.map(testServer => new Promise<void>(resolve => testServer.close(() => resolve()))));
+      }
+    });
+  }
+
+  for (const endpoint of [
+    'results?Query=Sample',
+    'results/torznab/api?t=search&q=Sample',
+  ]) {
+    it(`should resolve details on another instance after a cached ${endpoint} request`, async () => {
+      const definition: CardigannDefinition = {
+        id: 'sampleforum',
+        links: ['https://tracker.example/'],
+        name: 'Sample Forum',
+        search: {
+          fields: {
+            details: { attribute: 'href', selector: 'a[href^="viewtopic.php?t="]' },
+            id: { text: 42 },
+            title: { selector: 'a' },
+          },
+          paths: [{ path: '{{ if .Keywords }}forum/tracker.php{{ else }}tracker.php{{ end }}' }],
+          rows: { selector: 'tr.item-row' },
+        },
+      };
+      const sharedCache = new MemoryCache<unknown>(300);
+      const testServers: http.Server[] = [];
+      const requestsByInstance: string[][] = [];
+      const baseUrls: string[] = [];
+      try {
+        for (let instance = 0; instance < 2; instance++) {
+          const httpClient = new HttpClient();
+          const requestedUrls: string[] = [];
+          requestsByInstance.push(requestedUrls);
+          httpClient.getDecoded = async url => {
+            requestedUrls.push(url);
+            if (new URL(url).pathname === '/forum/tracker.php') {
+              return '<table><tr class="item-row"><td><a href="viewtopic.php?t=42&amp;ref=sample">Sample Topic</a></td></tr></table>';
+            }
+            return new URL(url).pathname === '/forum/viewtopic.php' ? '<h1>Sample Topic</h1>' : '';
+          };
+          const registry = new ProviderRegistry(httpClient);
+          registry.registerProvider(new CardigannProvider(definition, httpClient));
+          const testServer = http.createServer(createApp(registry, {
+            apiKey: 'sample-key',
+            cache: sharedCache,
+          }));
+          testServers.push(testServer);
+          await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+          const port = (testServer.address() as { port: number }).port;
+          baseUrls.push(`http://127.0.0.1:${port}/api/v2.0/indexers/sampleforum`);
+        }
+
+        const first = await requestWithHost(`${baseUrls[0]}/${endpoint}&apikey=sample-key`, 'shared.example');
+        assert.equal(first.status, 200);
+        assert.equal(first.cacheStatus, 'MISS');
+        const second = await requestWithHost(`${baseUrls[1]}/${endpoint}&apikey=sample-key`, 'shared.example');
+        assert.equal(second.status, 200);
+        assert.equal(second.cacheStatus, 'HIT');
+        assert.equal(second.body, first.body);
+        assert.deepEqual(requestsByInstance[1], []);
+
+        const details = await requestWithHost(`${baseUrls[1]}/details/42?apikey=sample-key`, 'shared.example');
+        assert.equal(details.status, 200);
+        assert.equal(details.cacheStatus, 'MISS');
+        const expectedUrl = 'https://tracker.example/forum/viewtopic.php?t=42&ref=sample';
+        assert.equal((JSON.parse(details.body) as TopicDetails[])[0].url, expectedUrl);
+        assert.deepEqual(requestsByInstance[1], [expectedUrl]);
+      } finally {
+        await Promise.all(testServers.map(testServer => new Promise<void>(resolve => testServer.close(() => resolve()))));
+      }
+    });
+  }
+});
 
 describe('API Search and RSS Caching Integration', () => {
   let baseUrl: string;

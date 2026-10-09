@@ -13,7 +13,7 @@ import { DownloadController } from './controllers/download.controller.js';
 import { ProviderController } from './controllers/provider.controller.js';
 import { RssController } from './controllers/rss.controller.js';
 import { SearchController } from './controllers/search.controller.js';
-import { apiKeyAuth } from './middleware/auth.js';
+import { apiKeyAuth, hashApiKey } from './middleware/auth.js';
 
 /**
  * Options for configuring the indexers router.
@@ -54,6 +54,10 @@ export function createIndexersRouter(
   optionsOrApiKey?: IndexerRouterOptions | string
 ): Router {
   const options = normalizeIndexerRouterOptions(optionsOrApiKey);
+  const cacheTtlSeconds = options.cacheTtlSeconds ?? 300;
+  if (options.cache && cacheTtlSeconds > 0) {
+    registry.shareTopicPaths(options.cache, hashApiKey(options.apiKey), cacheTtlSeconds);
+  }
 
   const router = Router();
 
