@@ -14,13 +14,13 @@ import { ApiErrorResponse, MagnetResponse } from '../../src/types/api.js';
 
 describe('Download redirect validation', () => {
   let baseUrl: string;
-  let proxyServer: http.Server;
+  let testProxyServer: http.Server;
   const receivedUrls: string[] = [];
-  let server: http.Server;
+  let testServer: http.Server;
   const testTorrent = 'd4:infod6:lengthi5e4:name15:Example Release12:piece lengthi16384e6:pieces20:AAAAAAAAAAAAAAAAAAAAee';
 
   before(async () => {
-    proxyServer = http.createServer((req, res) => {
+    testProxyServer = http.createServer((req, res) => {
       const url = req.url || '';
       receivedUrls.push(url);
       const target = new URL(url);
@@ -30,6 +30,8 @@ describe('Download redirect validation', () => {
         '/chain-blocked': '/blocked',
         '/mirror': 'http://files.tracker.example.test/final',
         '/relative': '/mirror',
+        '/wrong-port': 'http://tracker.example.test:8443/final',
+        '/wrong-scheme': 'https://tracker.example.test/final',
       };
       const location = redirects[target.pathname];
       if (location) {
@@ -39,8 +41,8 @@ describe('Download redirect validation', () => {
         res.end(testTorrent);
       }
     });
-    await new Promise<void>(resolve => proxyServer.listen(0, '127.0.0.1', resolve));
-    const proxyPort = (proxyServer.address() as { port: number }).port;
+    await new Promise<void>(resolve => testProxyServer.listen(0, '127.0.0.1', resolve));
+    const proxyPort = (testProxyServer.address() as { port: number }).port;
     const httpClient = new HttpClient({ host: '127.0.0.1', port: proxyPort, url: `http://127.0.0.1:${proxyPort}` }, 2000);
     const registry = new ProviderRegistry(httpClient);
     registry.registerProvider(new CardigannProvider({
@@ -53,13 +55,13 @@ describe('Download redirect validation', () => {
         rows: { selector: 'tr' },
       },
     }, httpClient));
-    server = http.createServer(createApp(registry));
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    testServer = http.createServer(createApp(registry));
+    await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${(testServer.address() as { port: number }).port}`;
   });
 
   after(async () => {
-    await Promise.all([server, proxyServer].map(testServer =>
+    await Promise.all([testServer, testProxyServer].map(testServer =>
       new Promise<void>(resolve => testServer.close(() => resolve()))
     ));
   });
@@ -90,6 +92,25 @@ describe('Download redirect validation', () => {
   });
 
   for (const endpoint of ['download', 'magnet']) {
+    it(`should reject mismatched schemes and ports before a ${endpoint} request`, async () => {
+      for (const targetUrl of ['https://tracker.example.test/final', 'http://tracker.example.test:8443/final']) {
+        receivedUrls.length = 0;
+        const response = await fetch(`${baseUrl}/api/v2.0/indexers/redirect-test/${endpoint}?url=${encodeURIComponent(targetUrl)}`);
+        assert.equal(response.status, 403);
+        assert.deepEqual(receivedUrls, []);
+      }
+    });
+
+    it(`should reject scheme and port changes in ${endpoint} redirects`, async () => {
+      for (const path of ['/wrong-port', '/wrong-scheme']) {
+        receivedUrls.length = 0;
+        const targetUrl = `http://tracker.example.test${path}`;
+        const response = await fetch(`${baseUrl}/api/v2.0/indexers/redirect-test/${endpoint}?url=${encodeURIComponent(targetUrl)}`);
+        assert.equal(response.status, 502);
+        assert.deepEqual(receivedUrls, [targetUrl]);
+      }
+    });
+
     it(`should reject disallowed redirects at every hop of a ${endpoint} request`, async () => {
       for (const path of ['/blocked', '/chain-blocked']) {
         receivedUrls.length = 0;

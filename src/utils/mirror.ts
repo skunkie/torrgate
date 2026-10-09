@@ -3,22 +3,22 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Returns the mirror whose host serves `targetUrl`, either exactly or as a subdomain
- * (`d.tracker.example` matches `https://tracker.example/`). Returns `undefined` when no
- * mirror matches or either URL cannot be parsed.
+ * Matches HTTP(S) mirror schemes and ports, allowing the mirror host and its subdomains.
  */
 export function findMatchingMirror(targetUrl: string, mirrors: string[]): string | undefined {
-  let targetHost: string;
+  let target: URL;
   try {
-    targetHost = new URL(targetUrl).hostname.toLowerCase();
+    target = new URL(targetUrl);
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') return undefined;
   } catch {
     return undefined;
   }
 
   return mirrors.find(mirror => {
     try {
-      const mirrorHost = new URL(mirror).hostname.toLowerCase();
-      return targetHost === mirrorHost || targetHost.endsWith(`.${mirrorHost}`);
+      const configured = new URL(mirror);
+      return target.protocol === configured.protocol && target.port === configured.port
+        && (target.hostname === configured.hostname || target.hostname.endsWith(`.${configured.hostname}`));
     } catch {
       return false;
     }

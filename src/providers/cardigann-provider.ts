@@ -158,7 +158,8 @@ export class CardigannProvider implements TrackerProvider {
    * tracker answers with a login or error page instead of the file.
    */
   async downloadTorrent(url: string): Promise<TorrentDownload> {
-    const baseUrl = findMatchingMirror(url, this.urls) ?? this.urls[0];
+    const baseUrl = findMatchingMirror(url, this.urls);
+    if (!baseUrl) throw new Error('Target download host is not allowed for this indexer');
     const fetchFile = async (): Promise<BinaryResponse> => {
       const headers: Record<string, string> = {};
       if (this.definition.login) {

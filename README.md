@@ -210,6 +210,8 @@ GET /api/v2.0/indexers/:indexer/download?url=<torrent-url>
 ```
 Fetches `.torrent` files through TorrGate for trackers that require session cookies or proxy access. The file is checked to be a real torrent (a login or error page is rejected with HTTP 502), responses are limited to 32 MB, and the tracker's own file name is kept.
 
+Download URLs and every redirect must match a configured mirror's scheme and port. The mirror hostname and its download subdomains are accepted. HTTP downloads require an explicitly configured HTTP mirror.
+
 ### 6. Magnet URI from `.torrent` File
 ```http
 GET /api/v2.0/indexers/:indexer/magnet?url=<torrent-url>

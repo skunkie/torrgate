@@ -11,6 +11,55 @@ import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 import { CardigannDefinition } from '../../src/providers/types.js';
 
+describe('CardigannProvider download transport', () => {
+  const definition: CardigannDefinition = {
+    id: 'sample-secure-tracker',
+    links: ['https://tracker.example/'],
+    login: { method: 'get', path: 'login' },
+    name: 'Sample Secure Tracker',
+    search: {
+      fields: { title: { selector: 'a' } },
+      paths: [{ path: 'search' }],
+      rows: { selector: 'tr' },
+    },
+  };
+
+  it('should reject unconfigured transports before authenticating or sending cookies', async () => {
+    const httpClient = new HttpClient();
+    let loginCount = 0;
+    let requestCount = 0;
+    httpClient.getBinary = async () => {
+      requestCount++;
+      return { data: Buffer.alloc(0), headers: {} };
+    };
+    const provider = new CardigannProvider(definition, httpClient);
+    provider.sessionManager.ensureSessionValid = async () => { loginCount++; return true; };
+    provider.sessionManager.getCookieHeader = () => 'bb_session=test-session';
+
+    for (const url of ['http://tracker.example/download', 'https://tracker.example:8443/download']) {
+      await assert.rejects(provider.downloadTorrent(url), /not allowed/);
+    }
+    assert.equal(loginCount, 0);
+    assert.equal(requestCount, 0);
+  });
+
+  it('should enforce configured transport on authenticated download redirects', async () => {
+    const httpClient = new HttpClient();
+    const provider = new CardigannProvider(definition, httpClient);
+    provider.sessionManager.ensureSessionValid = async () => true;
+    provider.sessionManager.getCookieHeader = () => 'bb_session=test-session';
+    for (const target of ['http://tracker.example/download', 'https://tracker.example:8443/download']) {
+      httpClient.getBinary = async (url, options = {}) => {
+        assert.equal(options.headers?.Cookie, 'bb_session=test-session');
+        assert.ok(options.beforeRedirect);
+        options.beforeRedirect({}, { headers: { location: target }, statusCode: 302 }, { headers: {}, method: 'GET', url });
+        return { data: Buffer.alloc(0), headers: {} };
+      };
+      await assert.rejects(provider.downloadTorrent('https://tracker.example/download'), /not allowed/);
+    }
+  });
+});
+
 describe('CardigannProvider Execution', () => {
   const sampleHtml = `
     <!DOCTYPE html>
@@ -456,8 +505,8 @@ describe('CardigannProvider Execution', () => {
     });
   }
 
-  for (const useForum of [true, false]) {
-    it(`should render inferred search paths with configured useforum=${useForum} and default pagination`, async () => {
+  for (const shouldUseForum of [true, false]) {
+    it(`should render inferred search paths with configured useforum=${shouldUseForum} and default pagination`, async () => {
       const httpClient = new HttpClient();
       const requestedUrls: string[] = [];
       httpClient.getDecoded = async url => {
@@ -477,10 +526,10 @@ describe('CardigannProvider Execution', () => {
           },
           paths: [{ path: '{{ if .Config.useforum }}forum/tracker.php{{ else }}tracker.php{{ end }}?page={{ .Query.Page }}&year={{ .Query.Year }}' }],
         },
-        settings: [{ default: useForum, name: 'useforum', type: 'checkbox' }],
+        settings: [{ default: shouldUseForum, name: 'useforum', type: 'checkbox' }],
       }, httpClient);
 
-      const directory = useForum ? 'forum/' : '';
+      const directory = shouldUseForum ? 'forum/' : '';
       const topicUrl = `https://example.org/${directory}viewtopic.php?t=42`;
       const details = await provider.getTopicDetails('42');
       assert.ok(details);
