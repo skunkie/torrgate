@@ -102,6 +102,20 @@ export function getUnprotectedAccountWarning(
   );
 }
 
+export function parseCorsOrigin(value: string | undefined): string | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  if (raw === '*') return raw;
+  try {
+    const url = new URL(raw);
+    if ((url.protocol === 'http:' || url.protocol === 'https:')
+      && url.pathname === '/' && !url.search && !url.hash && !url.username && !url.password) {
+      return url.origin;
+    }
+  } catch {}
+  throw new Error('CORS_ORIGIN must be * or a single HTTP(S) origin');
+}
+
 /**
  * Loads server configuration from CLI flags and environment variables.
  */
@@ -116,6 +130,11 @@ export function loadConfig(): ServerConfig {
       default: process.env.CACHE_TTL_SECONDS !== undefined ? Number(process.env.CACHE_TTL_SECONDS) : 300,
       description: 'Search and RSS cache TTL in seconds (0 to disable)',
       type: 'number',
+    })
+    .option('corsOrigin', {
+      default: process.env.CORS_ORIGIN,
+      description: 'Allowed browser origin for CORS (* for all origins)',
+      type: 'string',
     })
     .option('host', {
       default: process.env.HOST || '0.0.0.0',
@@ -151,6 +170,7 @@ export function loadConfig(): ServerConfig {
   const config: ServerConfig = {
     apiKey: argv.apiKey || process.env.API_KEY || undefined,
     cacheTtlSeconds: Number.isFinite(argv.cacheTtl) ? Number(argv.cacheTtl) : 300,
+    corsOrigin: parseCorsOrigin(argv.corsOrigin),
     host: argv.host,
     kvRestApiToken,
     kvRestApiUrl,

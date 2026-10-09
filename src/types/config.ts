@@ -19,6 +19,7 @@ export interface ProxyConfig {
 export interface ServerConfig {
   apiKey?: string;
   cacheTtlSeconds: number;
+  corsOrigin?: string;
   host: string;
   kvRestApiToken?: string;
   kvRestApiUrl?: string;

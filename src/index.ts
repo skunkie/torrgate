@@ -98,6 +98,7 @@ export function buildApp(): express.Application {
     apiKey: config.apiKey,
     cache,
     cacheTtlSeconds: config.cacheTtlSeconds,
+    corsOrigin: config.corsOrigin,
     trustProxy: config.trustProxy,
   });
 }

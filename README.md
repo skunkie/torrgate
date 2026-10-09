@@ -86,6 +86,7 @@ TorrGate can be configured via environment variables or a `.env` file:
 | :--- | :--- | :--- |
 | `API_KEY` | *(none)* | API key for protecting indexer endpoints (via `?apikey=...`, `X-Api-Key` header, or `Authorization: Bearer`). Optional, but required in practice whenever tracker accounts are configured. A client that sends five wrong keys within a minute gets HTTP 429 until the minute is up |
 | `CACHE_TTL_SECONDS` | `300` | Search and RSS cache TTL in seconds (0 to disable) |
+| `CORS_ORIGIN` | `*` | Allowed browser origin, such as `https://client.example`, or `*` for all origins. CLI `--corsOrigin` overrides this value |
 | `HOST` | `0.0.0.0` | Bind address |
 | `HTTP_PROXY` | *(none)* | Outbound HTTP proxy URL (e.g. `http://127.0.0.1:8888`) |
 | `HTTPS_PROXY` | *(none)* | Outbound HTTPS proxy URL (e.g. `http://user:pass@proxy.example.com:8080`). Only `http://` and `https://` proxies are supported; HTTPS sites are tunnelled with `CONNECT` and plain-HTTP sites are forwarded as ordinary proxy requests |
@@ -104,6 +105,8 @@ TorrGate can be configured via environment variables or a `.env` file:
 See [.env.example](.env.example) for a pre-configured template.
 
 Browser sign-in issues a signed session cookie valid for seven days. Sign out clears the cookie from the browser. Sessions are stateless: a copied token remains valid until it expires, including after sign-out or a server restart. To invalidate existing tokens, rotate `API_KEY` on every gateway instance using that key; API clients must then use the replacement key.
+
+Jackett-compatible feed and download URLs can carry API keys in query strings, which may be recorded in browser history or access logs. Redact those parameters from logs and avoid sharing keyed URLs; prefer `X-Api-Key` or Bearer authentication for direct API calls. `CORS_ORIGIN` restricts browser access to cross-origin responses and complements API-key authentication; it does not protect keys appearing in URLs.
 
 ### Tracker Environment Variable Derivation
 

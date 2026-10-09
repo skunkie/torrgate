@@ -9,6 +9,7 @@ import {
   findTrackerAccountVariables,
   getUnprotectedAccountWarning,
   loadConfig,
+  parseCorsOrigin,
   parseProxyUrl,
   parseTrustProxy,
 } from '../../src/config/config.js';
@@ -19,6 +20,7 @@ describe('Server Configuration Loader', () => {
   beforeEach(() => {
     delete process.env.API_KEY;
     delete process.env.CACHE_TTL_SECONDS;
+    delete process.env.CORS_ORIGIN;
     delete process.env.HOST;
     delete process.env.HTTP_PROXY;
     delete process.env.HTTPS_PROXY;
@@ -41,11 +43,33 @@ describe('Server Configuration Loader', () => {
     assert.equal(config.host, '0.0.0.0');
     assert.equal(config.port, 8443);
     assert.equal(config.cacheTtlSeconds, 300);
+    assert.equal(config.corsOrigin, undefined);
     assert.equal(config.requestTimeoutMs, 10000);
     assert.equal(config.apiKey, undefined);
     assert.equal(config.kvRestApiToken, undefined);
     assert.equal(config.kvRestApiUrl, undefined);
     assert.equal(config.proxy, undefined);
+  });
+
+  it('should load and normalize CORS_ORIGIN from the environment', () => {
+    process.env.CORS_ORIGIN = ' https://client.example:443/ ';
+    assert.equal(loadConfig().corsOrigin, 'https://client.example');
+  });
+
+  it('should let the CORS CLI option override the environment', () => {
+    const originalArgs = process.argv;
+    process.env.CORS_ORIGIN = 'https://environment.example';
+    try {
+      process.argv = ['node', 'torrgate', '--corsOrigin', 'https://cli.example:8443'];
+      assert.equal(loadConfig().corsOrigin, 'https://cli.example:8443');
+    } finally {
+      process.argv = originalArgs;
+    }
+  });
+
+  it('should reject invalid CORS configuration at startup', () => {
+    process.env.CORS_ORIGIN = 'https://client.example/private';
+    assert.throws(() => loadConfig(), /single HTTP\(S\) origin/);
   });
 
   it('should load KV_REST_API_URL and KV_REST_API_TOKEN from environment', () => {
@@ -114,6 +138,30 @@ describe('Server Configuration Loader', () => {
     assert.ok(parsed);
     assert.equal(parsed.host, '192.168.1.50');
     assert.equal(parsed.port, 9050);
+  });
+});
+
+describe('parseCorsOrigin', () => {
+  it('should accept defaults, wildcard and normalized HTTP(S) origins', () => {
+    assert.equal(parseCorsOrigin(undefined), undefined);
+    assert.equal(parseCorsOrigin('  '), undefined);
+    assert.equal(parseCorsOrigin(' * '), '*');
+    assert.equal(parseCorsOrigin('https://CLIENT.example:443/'), 'https://client.example');
+    assert.equal(parseCorsOrigin('http://client.example:8080'), 'http://client.example:8080');
+  });
+
+  it('should reject credentials, paths, queries, fragments and unsupported schemes', () => {
+    for (const value of [
+      'https://sample-user:sample-password@client.example',
+      'https://client.example/path',
+      'https://client.example?query=sample',
+      'https://client.example#sample',
+      'file:///sample',
+      'null',
+      'https://first.example,https://second.example',
+    ]) {
+      assert.throws(() => parseCorsOrigin(value), /single HTTP\(S\) origin/);
+    }
   });
 });
 
