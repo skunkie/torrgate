@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 
 import { MemoryCache } from '../../src/cache/memory-cache.js';
+import { CacheWrite } from '../../src/cache/store.js';
+import { getTopicPathStore } from '../../src/cache/topic-path-cache.js';
 import { HttpClient } from '../../src/http/http-client.js';
 import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
@@ -870,19 +872,17 @@ describe('CardigannProvider shared topic paths', () => {
   }
 
   it('should await shared storage and preserve paths throughout the configured search cache lifetime', async () => {
-    const cache = new MemoryCache<unknown>(300);
-    const store = {
-      clear: async () => { cache.clear(); },
-      delete: async (key: string) => cache.delete(key),
-      get: async <T>(key: string) => cache.get<T>(key),
-      set: async (key: string, value: unknown, ttlSeconds?: number) => {
-        await Promise.resolve();
-        cache.set(key, value, ttlSeconds);
-      },
-    };
+    const store = new MemoryCache<unknown>(300);
+    const sharedStore = getTopicPathStore(store);
+    const setMany = sharedStore.setMany.bind(sharedStore);
+    const writes = mock.method(sharedStore, 'setMany', async (entries: readonly CacheWrite[], ttlSeconds?: number) => {
+      await Promise.resolve();
+      await setMany(entries, ttlSeconds);
+    });
     const first = createProvider();
     first.shareTopicPaths(store, 'sample-namespace', 1_800);
     const [item] = await first.searchByTitle({ query: 'Sample' });
+    assert.equal(writes.mock.callCount(), 1);
 
     const second = createProvider();
     second.shareTopicPaths(store, 'sample-namespace', 1_800);
@@ -926,9 +926,9 @@ describe('CardigannProvider shared topic paths', () => {
     provider.shareTopicPaths(cache, 'sample-namespace', 300);
     const [item] = await provider.searchByTitle({ query: 'Sample' });
 
-    const key = provider.getTopicPathCacheKey(item);
-    assert.ok(key);
-    assert.equal(cache.get(key), './forum/viewtopic.php?t=42');
+    const entry = provider.getTopicPathCacheEntry(item);
+    assert.ok(entry);
+    assert.equal(getTopicPathStore(cache).get(entry.key), './forum/viewtopic.php?t=42');
   });
 });
 

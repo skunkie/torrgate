@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 import assert from 'node:assert/strict';
-import { describe, it, mock } from 'node:test';
+import { describe, it } from 'node:test';
 
 import { MemoryCache } from '../../src/cache/memory-cache.js';
-import { buildCacheKey } from '../../src/cache/store.js';
+import { BatchCacheStore, buildCacheKey } from '../../src/cache/store.js';
+import { getTopicPathStore } from '../../src/cache/topic-path-cache.js';
 
 describe('buildCacheKey', () => {
   it('should distinguish fields containing the separator character', () => {
@@ -179,51 +180,67 @@ describe('MemoryCache size budget', () => {
   });
 });
 
-describe('MemoryCache dependencies', () => {
-  it('should return dependent values while all required keys are present', () => {
-    const cache = new MemoryCache<string>(300);
-    cache.set('topic', 'sample-path');
-    cache.set('search', 'sample-response', 300, ['topic', 'topic']);
+describe('MemoryCache batch writes', () => {
+  it('should apply TTL and capacity limits to every batch entry', context => {
+    context.mock.timers.enable({ apis: ['Date'], now: 1_000 });
+    const cache = new MemoryCache<string>(300, 2);
+    cache.setMany([
+      { key: 'first', value: 'First Sample' },
+      { key: 'second', value: 'Second Sample' },
+      { key: 'third', value: 'Third Sample' },
+    ], 1);
+    assert.equal(cache.size, 2);
+    assert.equal(cache.get('first'), undefined);
+    assert.equal(cache.get('second'), 'Second Sample');
+    assert.equal(cache.get('third'), 'Third Sample');
+    context.mock.timers.tick(1_001);
+    assert.equal(cache.get('second'), undefined);
+    assert.equal(cache.get('third'), undefined);
+  });
+});
 
-    assert.equal(cache.get('search'), 'sample-response');
-    cache.delete('topic');
-    assert.equal(cache.get('search'), undefined);
-    assert.equal(cache.size, 0);
-    assert.equal(cache.sizeBytes, 0);
+describe('Topic path storage', () => {
+  it('should reject unsupported cache implementations', () => {
+    const store = {
+      clear: () => {},
+      delete: () => false,
+      get: () => undefined,
+      set: () => {},
+    };
+    assert.throws(() => getTopicPathStore(store), /supports only MemoryCache and UpstashRedisCache/);
   });
 
-  it('should invalidate dependent values after LRU eviction of a required key', () => {
-    const cache = new MemoryCache<string>(300, 3);
-    cache.set('topic', 'sample-path');
-    cache.set('search', 'sample-response', 300, ['topic']);
-    cache.set('other-topic', 'another-path');
-    cache.set('another-search', 'another-response');
-
-    assert.equal(cache.get('search'), undefined);
-    assert.equal(cache.get('another-search'), 'another-response');
+  it('should reject batch-capable wrappers around a response cache', () => {
+    const cache = new MemoryCache<unknown>();
+    cache.set('search', 'Sample Response');
+    const store: BatchCacheStore = {
+      clear: () => cache.clear(),
+      delete: key => cache.delete(key),
+      get: <R>(key: string) => cache.get<R>(key),
+      set: (key, value, ttlSeconds) => cache.set(key, value, ttlSeconds),
+      setMany: (entries, ttlSeconds) => cache.setMany(entries, ttlSeconds),
+    };
+    assert.throws(() => getTopicPathStore(store), /supports only MemoryCache and UpstashRedisCache/);
+    assert.equal(cache.size, 1);
+    assert.equal(cache.get('search'), 'Sample Response');
   });
 
-  it('should invalidate dependent values when a required key expires', () => {
-    mock.timers.enable({ apis: ['Date'], now: 1_000 });
-    try {
-      const cache = new MemoryCache<string>(300);
-      cache.set('topic', 'sample-path', 1);
-      cache.set('search', 'sample-response', 300, ['topic']);
-      mock.timers.tick(1_001);
-
-      assert.equal(cache.get('search'), undefined);
-    } finally {
-      mock.timers.reset();
+  it('should share a separate byte-bounded store for each response cache', () => {
+    const cache = new MemoryCache<string>(300, 2);
+    const topicPaths = getTopicPathStore(cache);
+    assert.equal(getTopicPathStore(cache), topicPaths);
+    assert.notEqual(getTopicPathStore(new MemoryCache<string>()), topicPaths);
+    assert.ok(topicPaths instanceof MemoryCache);
+    cache.set('first-search', 'First Sample Response');
+    cache.set('second-search', 'Second Sample Response');
+    for (let index = 0; index < 1_000; index++) {
+      topicPaths.set(`topic-${index}`, `./forum/viewtopic.php?t=${index}`);
     }
-  });
-
-  it('should include dependency metadata in the byte budget', () => {
-    const cache = new MemoryCache<string>(300, 10, 0, 40);
-    cache.set('topic', 'path');
-    cache.set('search', 'response', 300, ['topic'.repeat(10)]);
-
-    assert.equal(cache.get('search'), undefined);
-    assert.equal(cache.get('topic'), 'path');
-    assert.ok(cache.sizeBytes <= 40);
+    assert.equal(cache.size, 2);
+    assert.equal(cache.get('first-search'), 'First Sample Response');
+    assert.equal(topicPaths.get('topic-0'), './forum/viewtopic.php?t=0');
+    topicPaths.set('oversized-topic', 'x'.repeat(65 * 1024 * 1024));
+    assert.equal(topicPaths.get('oversized-topic'), undefined);
+    assert.ok(topicPaths.sizeBytes <= 64 * 1024 * 1024);
   });
 });

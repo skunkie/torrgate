@@ -4,7 +4,8 @@
 
 import path from 'path';
 
-import { CacheStore } from '../cache/store.js';
+import { BatchCacheStore, CacheStore, CacheWrite } from '../cache/store.js';
+import { getTopicPathStore } from '../cache/topic-path-cache.js';
 import { HttpClient } from '../http/http-client.js';
 import { RequestSlotStore } from '../http/request-throttle.js';
 import {
@@ -29,6 +30,8 @@ export const AGGREGATE_INDEXER_ID = 'all';
 export class ProviderRegistry {
   readonly httpClient: HttpClient;
   private readonly lookup: Map<string, TrackerProvider> = new Map();
+  private sharedTopicPaths?: BatchCacheStore;
+  private topicPathTtlSeconds = 300;
   private readonly uniqueProviders: Map<string, TrackerProvider> = new Map();
 
   constructor(
@@ -126,7 +129,20 @@ export class ProviderRegistry {
     }
   }
 
+  async restoreTopicPaths(topicPaths: Record<string, CacheWrite<string>[]>): Promise<void> {
+    const restoredEntries: CacheWrite<string>[] = [];
+    for (const [providerId, entries] of Object.entries(topicPaths)) {
+      const provider = this.getProvider(providerId);
+      if (!provider?.restoreTopicPaths) continue;
+      provider.restoreTopicPaths(entries);
+      restoredEntries.push(...entries);
+    }
+    await this.sharedTopicPaths?.setMany(restoredEntries, this.topicPathTtlSeconds);
+  }
+
   shareTopicPaths(store: CacheStore, namespace: string, cacheTtlSeconds: number): void {
+    this.sharedTopicPaths = getTopicPathStore(store);
+    this.topicPathTtlSeconds = cacheTtlSeconds + 300;
     for (const provider of this.getAllProviders()) {
       if (provider instanceof CardigannProvider) {
         provider.shareTopicPaths(store, namespace, cacheTtlSeconds);

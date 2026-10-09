@@ -13,15 +13,18 @@ import { ServerConfig } from '../../src/types/config.js';
 
 describe('Upstash Redis Cache Provider', () => {
   let lastCommand: unknown = null;
+  let requestCount = 0;
+  let lastPath = '';
   let lastHeaders: http.IncomingHttpHeaders | null = null;
   let testResponseStatus = 200;
   let testResponseBody: unknown = { result: 'OK' };
-  let testResponseQueue: unknown[] = [];
   let testServer: http.Server;
   let serverUrl = '';
 
   before(async () => {
     testServer = http.createServer((req, res) => {
+      requestCount++;
+      lastPath = req.url ?? '';
       lastHeaders = req.headers;
       let body = '';
       req.on('data', chunk => {
@@ -34,7 +37,7 @@ describe('Upstash Redis Cache Provider', () => {
           lastCommand = body;
         }
         res.writeHead(testResponseStatus, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(testResponseQueue.length > 0 ? testResponseQueue.shift() : testResponseBody));
+        res.end(JSON.stringify(testResponseBody));
       });
     });
 
@@ -54,11 +57,12 @@ describe('Upstash Redis Cache Provider', () => {
   });
 
   beforeEach(() => {
+    requestCount = 0;
+    lastPath = '';
     lastCommand = null;
     lastHeaders = null;
     testResponseStatus = 200;
     testResponseBody = { result: 'OK' };
-    testResponseQueue = [];
   });
 
   it('should store values using SET command with EX ttl and Authorization header', async () => {
@@ -111,38 +115,68 @@ describe('Upstash Redis Cache Provider', () => {
     assert.deepEqual(result, samplePayload);
   });
 
-  it('should store dependency keys with cached responses', async () => {
-    const cache = new UpstashRedisCache(serverUrl, 'test-secret-token');
-    await cache.set('search', 'sample-response', 300, ['topic', 'topic']);
-
+  it('should write topic paths with one hash command and individual field TTLs', async () => {
+    const cache = new UpstashRedisCache<string>(serverUrl, 'test-secret-token').createHashStore('topic-paths');
+    const entries = Array.from({ length: 600 }, (_, index) => ({
+      key: `topic-${index}`,
+      value: `./forum/viewtopic.php?t=${index}`,
+    }));
+    await cache.setMany(entries, 900);
+    assert.equal(requestCount, 1);
+    assert.equal(lastPath, '/');
+    assert.equal(lastHeaders?.authorization, 'Bearer test-secret-token');
     assert.deepEqual(lastCommand, [
-      'SET', 'search',
-      JSON.stringify({ cacheEntryVersion: 1, dependencies: ['topic'], value: 'sample-response' }),
-      'EX', 300,
+      'HSETEX', 'topic-paths', 'EX', 900, 'FIELDS', entries.length,
+      ...entries.flatMap(({ key, value }) => [key, value]),
     ]);
   });
 
-  it('should return the cached response while every dependency exists', async () => {
-    testResponseQueue = [
-      { result: JSON.stringify({ cacheEntryVersion: 1, dependencies: ['first-topic', 'second-topic'], value: 'sample-response' }) },
-      { result: 2 },
-    ];
+  it('should retrieve a self-contained response with one request', async () => {
+    const testPayload = {
+      response: 'Sample XML',
+      topicPaths: { sampleforum: [{ key: 'topic-42', value: './forum/viewtopic.php?t=42' }] },
+    };
+    testResponseBody = { result: JSON.stringify(testPayload) };
     const cache = new UpstashRedisCache(serverUrl, 'test-secret-token');
-
-    assert.equal(await cache.get('search'), 'sample-response');
-    assert.deepEqual(lastCommand, ['EXISTS', 'first-topic', 'second-topic']);
+    assert.deepEqual(await cache.get('search'), testPayload);
+    assert.equal(requestCount, 1);
+    assert.deepEqual(lastCommand, ['GET', 'search']);
   });
 
-  it('should invalidate a cached response when a dependency is unavailable', async () => {
-    testResponseQueue = [
-      { result: JSON.stringify({ cacheEntryVersion: 1, dependencies: ['first-topic', 'second-topic'], value: { Results: [] } }) },
-      { result: 1 },
-      { result: 1 },
-    ];
-    const cache = new UpstashRedisCache(serverUrl, 'test-secret-token');
+  it('should read, write and delete hash fields using the cache contract', async () => {
+    const cache = new UpstashRedisCache(serverUrl, 'test-secret-token', 120).createHashStore('topic-paths');
+    await cache.set('topic-42', { path: './forum/viewtopic.php?t=42' });
+    assert.deepEqual(lastCommand, [
+      'HSETEX', 'topic-paths', 'EX', 120, 'FIELDS', 1,
+      'topic-42', JSON.stringify({ path: './forum/viewtopic.php?t=42' }),
+    ]);
+    testResponseBody = { result: JSON.stringify({ path: './forum/viewtopic.php?t=42' }) };
+    assert.deepEqual(await cache.get('topic-42'), { path: './forum/viewtopic.php?t=42' });
+    assert.deepEqual(lastCommand, ['HGET', 'topic-paths', 'topic-42']);
+    testResponseBody = { result: null };
+    assert.equal(await cache.get('missing-topic'), undefined);
+    testResponseBody = { result: './forum/viewtopic.php?t=42' };
+    assert.equal(await cache.get('topic-42'), './forum/viewtopic.php?t=42');
+    testResponseBody = { result: 1 };
+    assert.equal(await cache.delete('topic-42'), true);
+    assert.deepEqual(lastCommand, ['HDEL', 'topic-paths', 'topic-42']);
+    await cache.clear();
+    assert.deepEqual(lastCommand, ['DEL', 'topic-paths']);
+    testResponseStatus = 503;
+    assert.equal(await cache.get('topic-42'), undefined);
+    assert.equal(await cache.delete('topic-42'), false);
+  });
 
-    assert.equal(await cache.get('search'), undefined);
-    assert.deepEqual(lastCommand, ['DEL', 'search']);
+  it('should skip empty or disabled batches and tolerate write failures', async () => {
+    const cache = new UpstashRedisCache<string>(serverUrl, 'test-secret-token').createHashStore('topic-paths');
+    const entries = [{ key: 'topic', value: 'Sample Path' }];
+    await cache.setMany([]);
+    await cache.setMany(entries, 0);
+    await cache.setMany(entries, -1);
+    assert.equal(requestCount, 0);
+    testResponseStatus = 503;
+    await assert.doesNotReject(async () => cache.setMany(entries));
+    await assert.doesNotReject(async () => new UpstashRedisCache('http://127.0.0.1:9', 'token').createHashStore('topic-paths').setMany(entries));
   });
 
   it('should return undefined when key does not exist or result is null', async () => {

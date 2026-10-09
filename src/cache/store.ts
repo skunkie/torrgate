@@ -9,8 +9,11 @@ export interface CacheStore<T = unknown> {
   clear(): Promise<void> | void;
   delete(key: string): Promise<boolean> | boolean;
   get<R = T>(key: string): Promise<R | undefined> | R | undefined;
-  /** A value is returned only while all dependency keys exist and have not expired. */
-  set(key: string, value: T, ttlSeconds?: number, dependencies?: readonly string[]): Promise<void> | void;
+  set(key: string, value: T, ttlSeconds?: number): Promise<void> | void;
+}
+
+export interface BatchCacheStore<T = unknown> extends CacheStore<T> {
+  setMany(entries: readonly CacheWrite<T>[], ttlSeconds?: number): Promise<void> | void;
 }
 
 /**
@@ -18,4 +21,9 @@ export interface CacheStore<T = unknown> {
  */
 export function buildCacheKey(namespace: string, fields: readonly unknown[]): string {
   return `${namespace}:${JSON.stringify(fields)}`;
+}
+
+export interface CacheWrite<T = unknown> {
+  key: string;
+  value: T;
 }

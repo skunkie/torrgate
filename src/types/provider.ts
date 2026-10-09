@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { CacheWrite } from '../cache/store.js';
 import { JackettIndexerCaps } from './jackett.js';
 import { TopicDetails, TorrentItem } from './torrent.js';
 
@@ -81,9 +82,10 @@ export interface TrackerProvider {
   /** Fetches a .torrent file from one of the tracker's hosts, rejecting non-torrent responses. */
   downloadTorrent(url: string): Promise<TorrentDownload>;
   getTopicDetails(id: string): Promise<TopicDetails | null>;
-  getTopicPathCacheKey?(item: TorrentItem): string | undefined;
+  getTopicPathCacheEntry?(item: TorrentItem): CacheWrite<string> | undefined;
   readonly id?: string;
   readonly name: ProviderName;
+  restoreTopicPaths?(entries: readonly CacheWrite<string>[]): void;
   searchByTitle(options: SearchOptions): Promise<TorrentItem[]>;
   searchPageByTitle?(options: SearchOptions): Promise<SearchPage>;
   readonly type?: 'private' | 'public' | 'semi-private';

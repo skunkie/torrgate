@@ -9,7 +9,8 @@ import { AxiosRequestConfig } from 'axios';
 import * as cheerio from 'cheerio';
 
 import { MemoryCache } from '../cache/memory-cache.js';
-import { buildCacheKey, CacheStore } from '../cache/store.js';
+import { BatchCacheStore, buildCacheKey, CacheStore, CacheWrite } from '../cache/store.js';
+import { getTopicPathStore } from '../cache/topic-path-cache.js';
 import { BinaryResponse, encodeWin1251QueryParam, HttpClient } from '../http/http-client.js';
 import { RequestSlotStore, RequestThrottle } from '../http/request-throttle.js';
 import {
@@ -64,17 +65,19 @@ export class CardigannProvider implements TrackerProvider {
   readonly definition: CardigannDefinition;
   readonly encoding: 'utf-8' | 'windows-1251';
   readonly id: string;
+  private readonly localTopicPaths = new MemoryCache<string>(300, Infinity);
   readonly name: ProviderName;
   /** Spaces requests to trackers whose definition sets `requestDelay`. */
   private readonly requestThrottle?: RequestThrottle;
+  private readonly searchTopicPaths = new WeakMap<TorrentItem, CacheWrite<string>>();
   readonly sessionManager: SessionManager;
+  private sharedTopicPaths?: BatchCacheStore;
   /** Whether the search request templates reference `.Page`, so later pages return different rows. */
   readonly supportsPaging: boolean;
   /** IANA time zone in which the tracker displays times without an explicit zone. */
   readonly timeZone: string;
   private topicPathScope = '';
   private topicPathTtlSeconds = 300;
-  private topicPaths: CacheStore = new MemoryCache<string>(300, 500, 0, 1024 * 1024);
   readonly type: 'private' | 'public' | 'semi-private';
   readonly urls: string[];
 
@@ -111,7 +114,7 @@ export class CardigannProvider implements TrackerProvider {
   }
 
   shareTopicPaths(store: CacheStore, namespace: string, cacheTtlSeconds: number): void {
-    this.topicPaths = store;
+    this.sharedTopicPaths = getTopicPathStore(store);
     this.topicPathScope = createHash('sha256')
       .update(JSON.stringify([namespace, this.definition]))
       .digest('hex');
@@ -123,13 +126,14 @@ export class CardigannProvider implements TrackerProvider {
     return buildCacheKey('topic-path', [this.topicPathScope, this.id, id]);
   }
 
-  getTopicPathCacheKey(item: TorrentItem): string | undefined {
-    if (this.definition.details?.path) {
-      return undefined;
+  getTopicPathCacheEntry(item: TorrentItem): CacheWrite<string> | undefined {
+    return this.searchTopicPaths.get(item);
+  }
+
+  restoreTopicPaths(entries: readonly CacheWrite<string>[]): void {
+    for (const { key, value } of entries) {
+      this.localTopicPaths.set(key, value, this.topicPathTtlSeconds);
     }
-    const mirror = this.urls.find(baseUrl => findMatchingMirror(item.url, [baseUrl])
-      && new URL(item.url).origin === new URL(baseUrl).origin);
-    return mirror ? this.topicPathKey(item.id) : undefined;
   }
 
   /**
@@ -269,7 +273,8 @@ export class CardigannProvider implements TrackerProvider {
       let topicPath: string;
       const rememberedTopicPath = this.definition.details?.path
         ? undefined
-        : await this.topicPaths.get<string>(this.topicPathKey(id));
+        : this.localTopicPaths.get<string>(this.topicPathKey(id))
+          ?? await this.sharedTopicPaths?.get<string>(this.topicPathKey(id));
       if (this.definition.details?.path) {
         topicPath = renderTemplate(this.definition.details.path, { Id: id, id });
       } else if (rememberedTopicPath) {
@@ -634,25 +639,26 @@ export class CardigannProvider implements TrackerProvider {
       timeZone: this.timeZone,
       workingUrl: page.workingUrl,
     });
+    const entries: CacheWrite<string>[] = [];
     if (!this.definition.details?.path) {
       const mirrorUrl = new URL(page.baseUrl);
       const mirrorDirectory = new URL('.', mirrorUrl).pathname;
-      await Promise.all(resultPage.items.map(async item => {
+      for (const item of resultPage.items) {
         const topicUrl = resolveSafeUrl(item.url, page.workingUrl);
-        if (!topicUrl) {
-          return;
-        }
+        if (!topicUrl) continue;
         const target = new URL(topicUrl);
-        if (target.origin === mirrorUrl.origin) {
-          const relativePath = path.posix.relative(mirrorDirectory, target.pathname);
-          await this.topicPaths.set(
-            this.topicPathKey(item.id),
-            `./${relativePath}${target.search}${target.hash}`,
-            this.topicPathTtlSeconds
-          );
-        }
-      }));
+        if (target.origin !== mirrorUrl.origin) continue;
+        const relativePath = path.posix.relative(mirrorDirectory, target.pathname);
+        const entry = {
+          key: this.topicPathKey(item.id),
+          value: `./${relativePath}${target.search}${target.hash}`,
+        };
+        this.searchTopicPaths.set(item, entry);
+        entries.push(entry);
+      }
     }
+    this.restoreTopicPaths(entries);
+    await this.sharedTopicPaths?.setMany(entries, this.topicPathTtlSeconds);
     return resultPage;
   }
 }

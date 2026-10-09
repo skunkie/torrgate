@@ -20,6 +20,7 @@ import {
 } from '../../utils/torznab-xml.js';
 import { SearchCachePolicy, setSearchCacheHeaders } from '../cache-headers.js';
 import { getProvidedApiKey, hashApiKey } from '../middleware/auth.js';
+import { CachedSearchResponse, collectTopicPath } from '../search-cache.js';
 import { sendTorznabError } from '../torznab-errors.js';
 
 const DEFAULT_FEED_LIMIT = 100;
@@ -94,7 +95,7 @@ export class RssController {
       const effectiveApiKey = getProvidedApiKey(req) || this.configuredApiKey;
       const origin = `${req.protocol}://${req.get('host') || ''}`;
 
-      const cacheKey = buildCacheKey('rss:v2', [
+      const cacheKey = buildCacheKey('rss:v3', [
         origin,
         indexerParam,
         t,
@@ -106,11 +107,12 @@ export class RssController {
       ]);
 
       if (this.cache && this.cacheTtlSeconds > 0) {
-        const cached = (await this.cache.get(cacheKey)) as string | undefined;
+        const cached = (await this.cache.get(cacheKey)) as CachedSearchResponse<string> | undefined;
         if (cached) {
           setSearchCacheHeaders(res, 'HIT', this.cachePolicy(effectiveApiKey));
           res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-          res.send(cached);
+          await this.registry.restoreTopicPaths(cached.topicPaths);
+          res.send(cached.response);
           return;
         }
       }
@@ -161,9 +163,9 @@ export class RssController {
       });
 
       if (this.cache && this.cacheTtlSeconds > 0 && !hasErrors) {
-        const dependencies = outcome.results.map(({ item, provider }) => provider.getTopicPathCacheKey?.(item))
-          .filter((key): key is string => key !== undefined);
-        await this.cache.set(cacheKey, xml, this.cacheTtlSeconds, dependencies);
+        const topicPaths: CachedSearchResponse<unknown>['topicPaths'] = {};
+        for (const { item, provider } of outcome.results) collectTopicPath(topicPaths, provider, item);
+        await this.cache.set(cacheKey, { response: xml, topicPaths }, this.cacheTtlSeconds);
       }
 
       setSearchCacheHeaders(res, 'MISS', this.cachePolicy(effectiveApiKey, hasErrors));

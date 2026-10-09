@@ -7,6 +7,8 @@ import http from 'node:http';
 import { after, before, describe, it } from 'node:test';
 
 import { MemoryCache } from '../../src/cache/memory-cache.js';
+import { getTopicPathStore } from '../../src/cache/topic-path-cache.js';
+import { UpstashRedisCache } from '../../src/cache/upstash-cache.js';
 import { HttpClient } from '../../src/http/http-client.js';
 import { createApp } from '../../src/index.js';
 import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
@@ -53,11 +55,11 @@ describe('Shared topic paths', () => {
   for (const route of [
     'sampleforum/results?Query=',
     'all/results?Query=',
-    'all/results?Offset=0&Limit=300&Query=',
-    'sampleforum/results/torznab/api?t=search&limit=300&q=',
-    'all/results/torznab/api?t=search&limit=300&q=',
+    'all/results?Offset=0&Limit=600&Query=',
+    'sampleforum/results/torznab/api?t=search&limit=600&q=',
+    'all/results/torznab/api?t=search&limit=600&q=',
   ]) {
-    it(`should refresh ${route} responses when their topic paths are evicted`, async () => {
+    it(`should restore ${route} topic paths from cached responses`, async () => {
       const sharedCache = new MemoryCache<unknown>(300);
       const definition: CardigannDefinition = {
         id: 'sampleforum',
@@ -76,14 +78,14 @@ describe('Shared topic paths', () => {
       const baseUrls: string[] = [];
       const requestedUrls: string[] = [];
       try {
-        for (let instance = 0; instance < 2; instance++) {
+        for (let instance = 0; instance < 3; instance++) {
           const httpClient = new HttpClient();
           httpClient.getDecoded = async url => {
             requestedUrls.push(url);
             const pathname = new URL(url).pathname;
             if (pathname.endsWith('/tracker.php')) {
-              const firstId = pathname === '/First/tracker.php' ? 1 : 301;
-              const rows = Array.from({ length: 300 }, (_, offset) =>
+              const firstId = pathname === '/First/tracker.php' ? 1 : 601;
+              const rows = Array.from({ length: 600 }, (_, offset) =>
                 `<tr class="item-row"><td><a href="viewtopic.php?t=${firstId + offset}">Sample Topic ${firstId + offset}</a></td></tr>`
               ).join('');
               return `<table>${rows}</table>`;
@@ -102,17 +104,17 @@ describe('Shared topic paths', () => {
         const search = async (instance: number, query: string) => requestWithHost(`${baseUrls[instance]}/${route}${query}`, 'shared.example');
         assert.equal((await search(0, 'First')).cacheStatus, 'MISS');
         assert.equal((await search(0, 'Second')).cacheStatus, 'MISS');
+        await getTopicPathStore(sharedCache).clear();
         const refreshed = await search(1, 'First');
         assert.equal(refreshed.status, 200);
-        assert.equal(refreshed.cacheStatus, 'MISS');
+        assert.equal(refreshed.cacheStatus, 'HIT');
         assert.deepEqual(requestedUrls, [
           'https://tracker.example/First/tracker.php',
           'https://tracker.example/Second/tracker.php',
-          'https://tracker.example/First/tracker.php',
         ]);
         assert.equal((await search(1, 'First')).cacheStatus, 'HIT');
 
-        const details = await requestWithHost(`${baseUrls[1]}/sampleforum/details/1`, 'shared.example');
+        const details = await requestWithHost(`${baseUrls[2]}/sampleforum/details/1`, 'shared.example');
         assert.equal(details.status, 200);
         assert.equal((JSON.parse(details.body) as TopicDetails[])[0].url, 'https://tracker.example/First/viewtopic.php?t=1');
       } finally {
@@ -185,6 +187,160 @@ describe('Shared topic paths', () => {
         assert.deepEqual(requestsByInstance[1], [expectedUrl]);
       } finally {
         await Promise.all(testServers.map(testServer => new Promise<void>(resolve => testServer.close(() => resolve()))));
+      }
+    });
+  }
+});
+
+describe('Search cache capacity and Redis commands', () => {
+  const definition: CardigannDefinition = {
+    id: 'sampleforum',
+    links: ['https://tracker.example/'],
+    name: 'Sample Forum',
+    search: {
+      fields: {
+        details: { attribute: 'href', selector: 'a' },
+        title: { selector: 'a' },
+      },
+      paths: [{ path: '{{ .Keywords }}/tracker.php' }],
+      rows: { selector: 'tr.item-row' },
+    },
+  };
+
+  function createRegistry(resultCount: number, providerId = 'sampleforum'): ProviderRegistry {
+    const httpClient = new HttpClient();
+    httpClient.getDecoded = async url => {
+      if (!new URL(url).pathname.endsWith('/tracker.php')) return '<h1>Sample Topic</h1>';
+      const queryId = Number(new URL(url).pathname.match(/Sample(\d+)/)?.[1] ?? 0);
+      const rows = Array.from({ length: resultCount }, (_, index) =>
+        `<tr class="item-row"><td><a href="viewtopic.php?t=${queryId * resultCount + index}">Sample Topic ${index}</a></td></tr>`
+      ).join('');
+      return `<table>${rows}</table>`;
+    };
+    const registry = new ProviderRegistry(httpClient, 'tests/fixtures');
+    registry.registerProvider(new CardigannProvider({ ...definition, id: providerId }, httpClient));
+    return registry;
+  }
+
+  for (const providerId of ['constructor', '__proto__']) {
+    for (const route of ['results?Query=Sample', 'results/torznab/api?t=search&q=Sample']) {
+      it(`should cache ${route} and resolve details for provider ${providerId}`, async () => {
+        const cache = new MemoryCache<unknown>();
+        const testServer = http.createServer(createApp(createRegistry(1, providerId), { cache }));
+        await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+        const port = (testServer.address() as { port: number }).port;
+        const baseUrl = `http://127.0.0.1:${port}/api/v2.0/indexers/${providerId}`;
+        try {
+          const first = await requestWithHost(`${baseUrl}/${route}`, 'shared.example');
+          assert.equal(first.status, 200);
+          assert.equal(first.cacheStatus, 'MISS');
+          const second = await requestWithHost(`${baseUrl}/${route}`, 'shared.example');
+          assert.equal(second.status, 200);
+          assert.equal(second.cacheStatus, 'HIT');
+          assert.equal(second.body, first.body);
+          const details = await requestWithHost(`${baseUrl}/details/0`, 'shared.example');
+          assert.equal(details.status, 200);
+          assert.equal((JSON.parse(details.body) as TopicDetails[])[0].url, 'https://tracker.example/Sample/viewtopic.php?t=0');
+        } finally {
+          await new Promise<void>(resolve => testServer.close(() => resolve()));
+        }
+      });
+    }
+  }
+
+  it('should retain 500 searches with distinct topic paths within the byte budget', async () => {
+    const cache = new MemoryCache<unknown>(300);
+    const testServer = http.createServer(createApp(createRegistry(50), { cache }));
+    await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+    const port = (testServer.address() as { port: number }).port;
+    const baseUrl = `http://127.0.0.1:${port}/api/v2.0/indexers/sampleforum/results?Query=Sample`;
+    try {
+      for (let index = 0; index < 500; index++) {
+        const response = await requestWithHost(`${baseUrl}${index}`, 'shared.example');
+        assert.equal(response.status, 200);
+        assert.equal(response.cacheStatus, 'MISS');
+      }
+      assert.equal(cache.size, 500);
+      assert.equal((await requestWithHost(`${baseUrl}0`, 'shared.example')).cacheStatus, 'HIT');
+      assert.equal((await requestWithHost(`${baseUrl}499`, 'shared.example')).cacheStatus, 'HIT');
+      assert.equal((await requestWithHost(`${baseUrl}500`, 'shared.example')).cacheStatus, 'MISS');
+      assert.equal(cache.size, 500);
+      assert.equal((await requestWithHost(`${baseUrl}1`, 'shared.example')).cacheStatus, 'MISS');
+    } finally {
+      await new Promise<void>(resolve => testServer.close(() => resolve()));
+    }
+  });
+
+  for (const route of ['results?Query=Sample', 'results/torznab/api?t=search&limit=600&q=Sample']) {
+    it(`should use constant Redis commands and restore paths across instances for ${route}`, async () => {
+      const values = new Map<string, string>();
+      const fields = new Map<string, string>();
+      const commands: (number | string)[][] = [];
+      const testRedisServer = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          const command = JSON.parse(body) as (number | string)[];
+          commands.push(command);
+          let result: unknown = null;
+          const key = String(command[1]);
+          if (command[0] === 'GET') result = values.get(key) ?? null;
+          if (command[0] === 'SET') {
+            values.set(key, String(command[2]));
+            result = 'OK';
+          }
+          if (command[0] === 'HGET') result = fields.get(String(command[2])) ?? null;
+          if (command[0] === 'HSETEX') {
+            for (let index = 6; index < command.length; index += 2) {
+              fields.set(String(command[index]), String(command[index + 1]));
+            }
+            result = 1;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ result }));
+        });
+      });
+      await new Promise<void>(resolve => testRedisServer.listen(0, '127.0.0.1', resolve));
+      const redisPort = (testRedisServer.address() as { port: number }).port;
+      const testServers: http.Server[] = [];
+      const baseUrls: string[] = [];
+      try {
+        for (let instance = 0; instance < 3; instance++) {
+          const cache = new UpstashRedisCache(`http://127.0.0.1:${redisPort}`, 'sample-token');
+          const testServer = http.createServer(createApp(createRegistry(600), { cache }));
+          testServers.push(testServer);
+          await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+          const port = (testServer.address() as { port: number }).port;
+          baseUrls.push(`http://127.0.0.1:${port}/api/v2.0/indexers/sampleforum`);
+        }
+        const first = await requestWithHost(`${baseUrls[0]}/${route}`, 'shared.example');
+        assert.equal(first.status, 200);
+        assert.equal(first.cacheStatus, 'MISS');
+        assert.deepEqual(commands.map(command => command[0]), ['GET', 'HSETEX', 'SET']);
+        assert.equal(commands[1][5], 600);
+
+        commands.length = 0;
+        const directDetails = await requestWithHost(`${baseUrls[2]}/details/0`, 'shared.example');
+        assert.equal(directDetails.status, 200);
+        assert.equal((JSON.parse(directDetails.body) as TopicDetails[])[0].url, 'https://tracker.example/Sample/viewtopic.php?t=0');
+        assert.deepEqual(commands.map(command => command[0]), ['GET', 'HGET', 'SET']);
+
+        fields.clear();
+        commands.length = 0;
+        const second = await requestWithHost(`${baseUrls[1]}/${route}`, 'shared.example');
+        assert.equal(second.cacheStatus, 'HIT');
+        assert.equal(second.body, first.body);
+        assert.deepEqual(commands.map(command => command[0]), ['GET', 'HSETEX']);
+        assert.equal(commands[1][5], 600);
+        commands.length = 0;
+        const details = await requestWithHost(`${baseUrls[2]}/details/1`, 'shared.example');
+        assert.equal(details.status, 200);
+        assert.equal((JSON.parse(details.body) as TopicDetails[])[0].url, 'https://tracker.example/Sample/viewtopic.php?t=1');
+        assert.deepEqual(commands.map(command => command[0]), ['GET', 'HGET', 'SET']);
+      } finally {
+        await Promise.all([...testServers, testRedisServer].map(server =>
+          new Promise<void>(resolve => server.close(() => resolve()))
+        ));
       }
     });
   }

@@ -19,6 +19,7 @@ import { extractInfoHash } from '../../utils/magnet.js';
 import { getQueryInteger, getQueryString } from '../../utils/query.js';
 import { SearchCachePolicy, setSearchCacheHeaders } from '../cache-headers.js';
 import { getProvidedApiKey, hashApiKey } from '../middleware/auth.js';
+import { CachedSearchResponse, collectTopicPath } from '../search-cache.js';
 
 /**
  * Topic ids are inserted into tracker URL paths, so only plain identifiers are accepted.
@@ -309,7 +310,7 @@ export class SearchController {
       const effectiveApiKey = getProvidedApiKey(req) || this.configuredApiKey;
       const origin = `${req.protocol}://${req.get('host') || ''}`;
 
-      const cacheKey = buildCacheKey('search:v2', [
+      const cacheKey = buildCacheKey('search:v3', [
         origin,
         indexerParam,
         query,
@@ -325,10 +326,11 @@ export class SearchController {
       ]);
 
       if (this.cache && this.cacheTtlSeconds > 0) {
-        const cached = (await this.cache.get(cacheKey)) as JackettSearchResponse | undefined;
+        const cached = (await this.cache.get(cacheKey)) as CachedSearchResponse<JackettSearchResponse> | undefined;
         if (cached) {
           setSearchCacheHeaders(res, 'HIT', this.cachePolicy(effectiveApiKey));
-          res.json(cached);
+          await this.registry.restoreTopicPaths(cached.topicPaths);
+          res.json(cached.response);
           return;
         }
       }
@@ -337,7 +339,7 @@ export class SearchController {
         const allResults: JackettResultItem[] = [];
         const indexerStatuses: JackettIndexerStatus[] = [];
         const elapsedTime = Date.now() - startTime;
-        const topicPathDependencies: string[] = [];
+        const topicPaths: CachedSearchResponse<unknown>['topicPaths'] = {};
         let errors: Record<string, string>;
 
         if (isWindowRequested) {
@@ -356,8 +358,7 @@ export class SearchController {
           errors = outcome.errors;
           const resultCounts = new Map(providers.map(provider => [provider, 0]));
           for (const { item, provider } of outcome.results) {
-            const topicPathKey = provider.getTopicPathCacheKey?.(item);
-            if (topicPathKey) topicPathDependencies.push(topicPathKey);
+            collectTopicPath(topicPaths, provider, item);
             const providerId = (provider.id || provider.name).toLowerCase();
             resultCounts.set(provider, (resultCounts.get(provider) ?? 0) + 1);
             allResults.push(
@@ -402,8 +403,7 @@ export class SearchController {
 
             const mappings = provider ? getCategoryMappings(provider) : [];
             for (const item of items) {
-              const topicPathKey = provider?.getTopicPathCacheKey?.(item);
-              if (topicPathKey) topicPathDependencies.push(topicPathKey);
+              collectTopicPath(topicPaths, provider, item);
               allResults.push(
                 toJackettResultItem(
                   item,
@@ -426,7 +426,7 @@ export class SearchController {
         const hasErrors = Object.keys(errors).length > 0;
 
         if (this.cache && this.cacheTtlSeconds > 0 && !hasErrors) {
-          await this.cache.set(cacheKey, response, this.cacheTtlSeconds, topicPathDependencies);
+          await this.cache.set(cacheKey, { response, topicPaths }, this.cacheTtlSeconds);
         }
 
         setSearchCacheHeaders(res, 'MISS', this.cachePolicy(effectiveApiKey, hasErrors));
@@ -501,9 +501,9 @@ export class SearchController {
       };
 
       if (this.cache && this.cacheTtlSeconds > 0) {
-        const dependencies = items.map(item => provider.getTopicPathCacheKey?.(item))
-          .filter((key): key is string => key !== undefined);
-        await this.cache.set(cacheKey, response, this.cacheTtlSeconds, dependencies);
+        const topicPaths: CachedSearchResponse<unknown>['topicPaths'] = {};
+        for (const item of items) collectTopicPath(topicPaths, provider, item);
+        await this.cache.set(cacheKey, { response, topicPaths }, this.cacheTtlSeconds);
       }
 
       setSearchCacheHeaders(res, 'MISS', this.cachePolicy(effectiveApiKey));

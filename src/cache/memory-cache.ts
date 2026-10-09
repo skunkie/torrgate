@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { CacheStore } from './store.js';
+import { BatchCacheStore, CacheWrite } from './store.js';
 
 interface CacheEntry<T> {
-  dependencies: readonly string[];
   expiresAt: number;
   sizeBytes: number;
   value: T;
@@ -22,7 +21,7 @@ function estimateSizeBytes(key: string, value: unknown): number {
  * In-memory TTL cache with LRU eviction, bounded by both entry count and approximate size.
  * A value larger than the whole size budget is not stored.
  */
-export class MemoryCache<T> implements CacheStore<T> {
+export class MemoryCache<T> implements BatchCacheStore<T> {
   private readonly cleanupTimer?: NodeJS.Timeout;
   private readonly defaultTtlSeconds: number;
   private readonly maxEntries: number;
@@ -98,14 +97,6 @@ export class MemoryCache<T> implements CacheStore<T> {
       return undefined;
     }
 
-    if (entry.dependencies.some(dependency => {
-      const requiredEntry = this.store.get(dependency);
-      return !requiredEntry || Date.now() > requiredEntry.expiresAt;
-    })) {
-      this.delete(key);
-      return undefined;
-    }
-
     // Refresh position for LRU eviction
     this.store.delete(key);
     this.store.set(key, entry);
@@ -116,16 +107,14 @@ export class MemoryCache<T> implements CacheStore<T> {
     return this.get(key) !== undefined;
   }
 
-  set(key: string, value: T, ttlSeconds?: number, dependencies: readonly string[] = []): void {
+  set(key: string, value: T, ttlSeconds?: number): void {
     const effectiveTtl = ttlSeconds !== undefined ? ttlSeconds : this.defaultTtlSeconds;
     if (effectiveTtl <= 0) {
       return;
     }
 
     this.delete(key);
-    const requiredKeys = [...new Set(dependencies)];
-    const sizeBytes = estimateSizeBytes(key, value)
-      + (requiredKeys.length > 0 ? Buffer.byteLength(JSON.stringify(requiredKeys)) : 0);
+    const sizeBytes = estimateSizeBytes(key, value);
     if (sizeBytes > this.maxSizeBytes) {
       return;
     }
@@ -145,12 +134,17 @@ export class MemoryCache<T> implements CacheStore<T> {
     }
 
     this.store.set(key, {
-      dependencies: requiredKeys,
       expiresAt: Date.now() + effectiveTtl * 1000,
       sizeBytes,
       value,
     });
     this.totalSizeBytes += sizeBytes;
+  }
+
+  setMany(entries: readonly CacheWrite<T>[], ttlSeconds?: number): void {
+    for (const { key, value } of entries) {
+      this.set(key, value, ttlSeconds);
+    }
   }
 
   get size(): number {

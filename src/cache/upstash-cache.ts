@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { RequestSlotStore } from '../http/request-throttle.js';
-import { CacheStore } from './store.js';
+import { BatchCacheStore, CacheStore, CacheWrite } from './store.js';
 
 /**
  * Sets the key when absent and returns 0, or returns the key's remaining lifetime in
@@ -11,20 +11,6 @@ import { CacheStore } from './store.js';
  */
 const CLAIM_SLOT_SCRIPT = `if redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end
 return math.max(redis.call('PTTL', KEYS[1]), 1)`;
-
-interface DependentCacheEntry {
-  cacheEntryVersion: 1;
-  dependencies: string[];
-  value: unknown;
-}
-
-function isDependentCacheEntry(value: unknown): value is DependentCacheEntry {
-  return typeof value === 'object' && value !== null
-    && 'cacheEntryVersion' in value && value.cacheEntryVersion === 1
-    && 'dependencies' in value && Array.isArray(value.dependencies)
-    && value.dependencies.every(key => typeof key === 'string')
-    && 'value' in value;
-}
 
 /**
  * Persistent Redis cache provider using Upstash HTTP REST API.
@@ -90,38 +76,66 @@ export class UpstashRedisCache<T = unknown> implements CacheStore<T>, RequestSlo
         }
       }
 
-      if (isDependentCacheEntry(value)) {
-        if (value.dependencies.length > 0) {
-          const count = await this.sendCommand<number>(['EXISTS', ...value.dependencies]);
-          if (count !== value.dependencies.length) {
-            await this.delete(key);
-            return undefined;
-          }
-        }
-        return value.value as R;
-      }
       return value as R;
     } catch {
       return undefined;
     }
   }
 
-  async set(key: string, value: T, ttlSeconds?: number, dependencies: readonly string[] = []): Promise<void> {
+  async set(key: string, value: T, ttlSeconds?: number): Promise<void> {
     const effectiveTtl = ttlSeconds !== undefined ? ttlSeconds : this.defaultTtlSeconds;
     if (effectiveTtl <= 0) {
       return;
     }
 
     try {
-      const requiredKeys = [...new Set(dependencies)];
-      const entry: T | DependentCacheEntry = requiredKeys.length > 0
-        ? { cacheEntryVersion: 1, dependencies: requiredKeys, value }
-        : value;
-      const serialized = typeof entry === 'string' ? entry : JSON.stringify(entry);
+      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
       await this.sendCommand(['SET', key, serialized, 'EX', Math.floor(effectiveTtl)]);
     } catch {
       // Safe no-throw on cache write failure
     }
+  }
+
+  createHashStore(hashKey: string): BatchCacheStore<T> {
+    const setMany = async (entries: readonly CacheWrite<T>[], ttlSeconds?: number): Promise<void> => {
+      const effectiveTtl = ttlSeconds ?? this.defaultTtlSeconds;
+      if (entries.length === 0 || effectiveTtl <= 0) return;
+      try {
+        await this.sendCommand([
+          'HSETEX', hashKey, 'EX', Math.floor(effectiveTtl), 'FIELDS', entries.length,
+          ...entries.flatMap(({ key, value }) => [key, typeof value === 'string' ? value : JSON.stringify(value)]),
+        ]);
+      } catch {
+        // Cache writes are best effort.
+      }
+    };
+    return {
+      clear: async () => { await this.delete(hashKey); },
+      delete: async key => {
+        try {
+          const count = await this.sendCommand<number>(['HDEL', hashKey, key]);
+          return typeof count === 'number' && count > 0;
+        } catch {
+          return false;
+        }
+      },
+      get: async <R = T>(key: string): Promise<R | undefined> => {
+        try {
+          const raw = await this.sendCommand<unknown>(['HGET', hashKey, key]);
+          if (raw === null || raw === undefined) return undefined;
+          if (typeof raw !== 'string') return raw as R;
+          try {
+            return JSON.parse(raw) as R;
+          } catch {
+            return raw as R;
+          }
+        } catch {
+          return undefined;
+        }
+      },
+      set: (key, value, ttlSeconds) => setMany([{ key, value }], ttlSeconds),
+      setMany,
+    };
   }
 
   private async sendCommand<R = unknown>(command: (number | string)[]): Promise<R | undefined> {
