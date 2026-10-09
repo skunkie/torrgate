@@ -351,6 +351,42 @@ describe('API Key Authentication Middleware', () => {
     });
   });
 
+  describe('Session cookie transport behind proxies', () => {
+    for (const { shouldSetSecure, trustProxy } of [
+      { shouldSetSecure: false, trustProxy: undefined },
+      { shouldSetSecure: false, trustProxy: false },
+      { shouldSetSecure: true, trustProxy: true },
+      { shouldSetSecure: true, trustProxy: 'loopback' },
+      { shouldSetSecure: false, trustProxy: '192.0.2.1' },
+    ]) {
+      it(`should respect trustProxy=${String(trustProxy)} when setting the Secure flag`, async () => {
+        const registry = new ProviderRegistry(new HttpClient());
+        const testServer = http.createServer(createApp(registry, { apiKey: sampleApiKey, trustProxy }));
+        try {
+          await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));
+          const port = (testServer.address() as { port: number }).port;
+          const response = await fetch(`http://127.0.0.1:${port}/login`, {
+            body: new URLSearchParams({ apiKey: sampleApiKey }).toString(),
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'X-Forwarded-Proto': 'https',
+            },
+            method: 'POST',
+            redirect: 'manual',
+          });
+          assert.equal(response.status, 302);
+          const cookie = response.headers.get('set-cookie');
+          assert.ok(cookie);
+          assert.ok(cookie.includes(`${SESSION_COOKIE_NAME}=`));
+          const hasSecureFlag = cookie.split(';').some(attribute => attribute.trim() === 'Secure');
+          assert.equal(hasSecureFlag, shouldSetSecure);
+        } finally {
+          await new Promise<void>(resolve => testServer.close(() => resolve()));
+        }
+      });
+    }
+  });
+
   describe('timingSafeCompare', () => {
     it('should return true for identical strings', () => {
       assert.equal(timingSafeCompare('secret-token', 'secret-token'), true);

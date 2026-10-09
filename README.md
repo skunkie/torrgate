@@ -98,7 +98,7 @@ TorrGate can be configured via environment variables or a `.env` file:
 | `TORRGATE_<ID>_TIMEZONE` | *(`TRACKER_TIMEZONE`)* | IANA time zone in which that tracker shows release times |
 | `TORRGATE_<ID>_USERNAME` | *(none)* | Account username for semi-private trackers |
 | `TRACKER_TIMEZONE` | `Europe/Moscow` | IANA time zone for tracker times that carry no zone, used to turn them into exact publish dates |
-| `TRUST_PROXY` | *(none; `true` on Vercel)* | Express `trust proxy` value (`true`, a hop count, or addresses such as `loopback, 10.0.0.0/8`). Set it behind a reverse proxy so failed-key throttling sees each client's real address instead of the proxy's |
+| `TRUST_PROXY` | *(none; `true` on Vercel)* | Express `trust proxy` value (`true`, a hop count, or addresses such as `loopback, 10.0.0.0/8`). Configure it for trusted reverse proxies so failed-key throttling sees each client's real address and HTTPS sign-in responses set the Secure cookie flag. Forwarded protocol headers from untrusted clients are ignored |
 | `USER_AGENT` | *(Chrome)* | Custom User-Agent header (recommended to match browser if using session cookies) |
 
 See [.env.example](.env.example) for a pre-configured template.

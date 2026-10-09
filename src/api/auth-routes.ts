@@ -58,8 +58,7 @@ export function createAuthRouter(options: IndexerRouterOptions): Router {
     if (timingSafeCompare(submittedKey, options.apiKey)) {
       authLimiter?.reset(clientId);
       const token = createSessionToken(options.apiKey);
-      const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-      const secureFlag = isSecure ? '; Secure' : '';
+      const secureFlag = req.secure ? '; Secure' : '';
       res.setHeader(
         'Set-Cookie',
         `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800${secureFlag}`
