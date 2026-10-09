@@ -139,7 +139,18 @@ export class CardigannProvider implements TrackerProvider {
         headers.Cookie = cookieHeader;
       }
       await this.requestThrottle?.acquire();
-      return this.httpClient.getBinary(url, { headers });
+      return this.httpClient.getBinary(url, {
+        beforeRedirect: (_options, responseDetails, requestDetails) => {
+          const target = new URL(responseDetails.headers.location, requestDetails.url);
+          if (
+            (target.protocol !== 'http:' && target.protocol !== 'https:') ||
+            !findMatchingMirror(target.href, this.urls)
+          ) {
+            throw new Error('Target download host is not allowed for this indexer');
+          }
+        },
+        headers,
+      });
     };
 
     let response = await fetchFile();

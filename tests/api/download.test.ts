@@ -8,8 +8,103 @@ import { after, before, describe, it } from 'node:test';
 
 import { HttpClient } from '../../src/http/http-client.js';
 import { createApp } from '../../src/index.js';
+import { CardigannProvider } from '../../src/providers/cardigann-provider.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 import { ApiErrorResponse, MagnetResponse } from '../../src/types/api.js';
+
+describe('Download redirect validation', () => {
+  let baseUrl: string;
+  let proxyServer: http.Server;
+  const receivedUrls: string[] = [];
+  let server: http.Server;
+  const testTorrent = 'd4:infod6:lengthi5e4:name15:Example Release12:piece lengthi16384e6:pieces20:AAAAAAAAAAAAAAAAAAAAee';
+
+  before(async () => {
+    proxyServer = http.createServer((req, res) => {
+      const url = req.url || '';
+      receivedUrls.push(url);
+      const target = new URL(url);
+      const redirects: Record<string, string> = {
+        '/alternate': 'http://mirror.example.test/final',
+        '/blocked': 'http://disallowed.example.test/private',
+        '/chain-blocked': '/blocked',
+        '/mirror': 'http://files.tracker.example.test/final',
+        '/relative': '/mirror',
+      };
+      const location = redirects[target.pathname];
+      if (location) {
+        res.writeHead(302, { Location: location });
+        res.end();
+      } else {
+        res.end(testTorrent);
+      }
+    });
+    await new Promise<void>(resolve => proxyServer.listen(0, '127.0.0.1', resolve));
+    const proxyPort = (proxyServer.address() as { port: number }).port;
+    const httpClient = new HttpClient({ host: '127.0.0.1', port: proxyPort, url: `http://127.0.0.1:${proxyPort}` }, 2000);
+    const registry = new ProviderRegistry(httpClient);
+    registry.registerProvider(new CardigannProvider({
+      id: 'redirect-test',
+      links: ['http://tracker.example.test/', 'http://mirror.example.test/'],
+      name: 'Sample Redirect Tracker',
+      search: {
+        fields: { title: { selector: 'a' } },
+        paths: [{ path: '/' }],
+        rows: { selector: 'tr' },
+      },
+    }, httpClient));
+    server = http.createServer(createApp(registry));
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  });
+
+  after(async () => {
+    await Promise.all([server, proxyServer].map(testServer =>
+      new Promise<void>(resolve => testServer.close(() => resolve()))
+    ));
+  });
+
+  it('should follow relative redirects and redirects to allowed download subdomains', async () => {
+    receivedUrls.length = 0;
+    const url = encodeURIComponent('http://tracker.example.test/relative');
+    const response = await fetch(`${baseUrl}/api/v2.0/indexers/redirect-test/download?url=${url}`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), testTorrent);
+    assert.deepEqual(receivedUrls, [
+      'http://tracker.example.test/relative',
+      'http://tracker.example.test/mirror',
+      'http://files.tracker.example.test/final',
+    ]);
+  });
+
+  it('should follow redirects to another configured tracker mirror', async () => {
+    receivedUrls.length = 0;
+    const url = encodeURIComponent('http://tracker.example.test/alternate');
+    const response = await fetch(`${baseUrl}/api/v2.0/indexers/redirect-test/download?url=${url}`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), testTorrent);
+    assert.deepEqual(receivedUrls, [
+      'http://tracker.example.test/alternate',
+      'http://mirror.example.test/final',
+    ]);
+  });
+
+  for (const endpoint of ['download', 'magnet']) {
+    it(`should reject disallowed redirects at every hop of a ${endpoint} request`, async () => {
+      for (const path of ['/blocked', '/chain-blocked']) {
+        receivedUrls.length = 0;
+        const url = encodeURIComponent(`http://tracker.example.test${path}`);
+        const response = await fetch(`${baseUrl}/api/v2.0/indexers/redirect-test/${endpoint}?url=${url}`);
+        assert.equal(response.status, 502);
+        const body = await response.json() as ApiErrorResponse;
+        assert.match(body.message, /Target download host is not allowed/);
+        assert.deepEqual(receivedUrls, path === '/blocked'
+          ? ['http://tracker.example.test/blocked']
+          : ['http://tracker.example.test/chain-blocked', 'http://tracker.example.test/blocked']);
+      }
+    });
+  }
+});
 
 describe('Download Proxy Controller Integration', () => {
   let baseUrl: string;
