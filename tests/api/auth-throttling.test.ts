@@ -94,6 +94,36 @@ describe('Failed API key throttling', () => {
     assert.match(await blocked.text(), /<error code="500" /);
   });
 
+  it('should share the API and sign-in limit across rotating addresses in an IPv6 /64', async () => {
+    for (let host = 1; host <= 5; host++) {
+      const response = await requestIndexers(`2001:db8:1234:abcd::${host}`, { 'X-Api-Key': 'wrong-sample-key' });
+      assert.equal(response.status, 401);
+    }
+    const blocked = await requestIndexers('2001:0DB8:1234:ABCD::6', { 'X-Api-Key': sampleApiKey });
+    assert.equal(blocked.status, 429);
+
+    const login = await fetch(`${baseUrl}/login`, {
+      body: new URLSearchParams({ apiKey: sampleApiKey }).toString(),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Forwarded-For': '2001:db8:1234:abcd::7',
+      },
+      method: 'POST',
+      redirect: 'manual',
+    });
+    assert.equal(login.status, 429);
+    const neighbor = await requestIndexers('2001:db8:1234:abce::1', { 'X-Api-Key': sampleApiKey });
+    assert.equal(neighbor.status, 200);
+  });
+
+  it('should share IPv4 and mapped IPv6 limits without grouping unrelated IPv4 clients', async () => {
+    await sendWrongKeys('::ffff:198.51.100.25', 5);
+    const blocked = await requestIndexers('198.51.100.25', { 'X-Api-Key': sampleApiKey });
+    assert.equal(blocked.status, 429);
+    const otherClient = await requestIndexers('::ffff:198.51.100.26', { 'X-Api-Key': sampleApiKey });
+    assert.equal(otherClient.status, 200);
+  });
+
   it('should track clients behind a trusted proxy separately', async () => {
     await sendWrongKeys('198.51.100.13', 5);
 

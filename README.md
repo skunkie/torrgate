@@ -106,6 +106,8 @@ See [.env.example](.env.example) for a pre-configured template.
 
 Browser sign-in issues a signed session cookie valid for seven days. Sign out clears the cookie from the browser. Sessions are stateless: a copied token remains valid until it expires, including after sign-out or a server restart. To invalidate existing tokens, rotate `API_KEY` on every gateway instance using that key; API clients must then use the replacement key.
 
+Failed API-key attempts on the API and sign-in form share a limit per IPv4 address or IPv6 `/64` network. IPv4-mapped IPv6 addresses use their underlying IPv4 address. Users on the same IPv6 network share the limit, so repeated failures from one device can temporarily block sign-in on another.
+
 Jackett-compatible feed and download URLs can carry API keys in query strings, which may be recorded in browser history or access logs. Redact those parameters from logs and avoid sharing keyed URLs; prefer `X-Api-Key` or Bearer authentication for direct API calls. `CORS_ORIGIN` restricts browser access to cross-origin responses and complements API-key authentication; it does not protect keys appearing in URLs.
 
 ### Tracker Environment Variable Derivation

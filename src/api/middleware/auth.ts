@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import { ApiErrorResponse } from '../../types/api.js';
+import { getClientNetwork } from '../../utils/client-network.js';
 import { FailedAttemptLimiter } from '../../utils/failed-attempt-limiter.js';
 import { isTorznabPath, TORZNAB_ERROR_CODES } from '../../utils/torznab-xml.js';
 import { sendTorznabError } from '../torznab-errors.js';
@@ -116,11 +117,10 @@ export function createSessionToken(secret: string, timestamp: number = Date.now(
 }
 
 /**
- * Identifies the client for rate limiting. Uses Express's `req.ip`, which honours the
- * `trust proxy` setting so clients behind a reverse proxy are told apart.
+ * Uses the trusted client address, grouping IPv6 clients by /64 and IPv4 by address.
  */
 export function getClientId(req: Request): string {
-  return req.ip || req.socket.remoteAddress || 'unknown';
+  return getClientNetwork(req.ip || req.socket.remoteAddress || 'unknown');
 }
 
 /**
