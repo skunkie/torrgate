@@ -111,9 +111,9 @@ export class SessionManager {
     }
 
     const username =
-      process.env[`TORRGATE_${providerId}_USERNAME`] || process.env.TRACKER_USERNAME || '';
+      process.env[`TORRGATE_${providerId}_USERNAME`] || process.env.TORRGATE_TRACKER_USERNAME || '';
     const password =
-      process.env[`TORRGATE_${providerId}_PASSWORD`] || process.env.TRACKER_PASSWORD || '';
+      process.env[`TORRGATE_${providerId}_PASSWORD`] || process.env.TORRGATE_TRACKER_PASSWORD || '';
 
     if (!login.path) {
       return false;
@@ -301,8 +301,8 @@ export class SessionManager {
     if (!this.isEnvCookieRejected && process.env[`${this.envVarPrefix}_COOKIE`]) {
       return true;
     }
-    const username = process.env[`${this.envVarPrefix}_USERNAME`] || process.env.TRACKER_USERNAME;
-    const password = process.env[`${this.envVarPrefix}_PASSWORD`] || process.env.TRACKER_PASSWORD;
+    const username = process.env[`${this.envVarPrefix}_USERNAME`] || process.env.TORRGATE_TRACKER_USERNAME;
+    const password = process.env[`${this.envVarPrefix}_PASSWORD`] || process.env.TORRGATE_TRACKER_PASSWORD;
     return Boolean(username && password) || !JSON.stringify(login.inputs || {}).includes('.Config.');
   }
 

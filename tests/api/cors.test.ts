@@ -13,8 +13,8 @@ describe('Configured CORS responses', () => {
   const sampleApiKey = 'sample-cors-key';
 
   beforeEach(() => {
-    delete process.env.CORS_ORIGIN;
-    process.env.API_KEY = sampleApiKey;
+    delete process.env.TORRGATE_CORS_ORIGIN;
+    process.env.TORRGATE_API_KEY = sampleApiKey;
   });
 
   afterEach(() => {
@@ -22,8 +22,8 @@ describe('Configured CORS responses', () => {
   });
 
   for (const corsOrigin of [undefined, '*', 'https://client.example:8443']) {
-    it(`should serve configured CORS headers with CORS_ORIGIN=${String(corsOrigin)}`, async () => {
-      if (corsOrigin !== undefined) process.env.CORS_ORIGIN = corsOrigin;
+    it(`should serve configured CORS headers with TORRGATE_CORS_ORIGIN=${String(corsOrigin)}`, async () => {
+      if (corsOrigin !== undefined) process.env.TORRGATE_CORS_ORIGIN = corsOrigin;
       const testServer = http.createServer(buildApp());
       try {
         await new Promise<void>(resolve => testServer.listen(0, '127.0.0.1', resolve));

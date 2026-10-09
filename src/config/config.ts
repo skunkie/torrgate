@@ -46,7 +46,7 @@ export function parseProxyUrl(rawUrl: string): ProxyConfig | undefined {
 }
 
 /**
- * Parses a `TRUST_PROXY` value into an Express `trust proxy` setting: `true`/`false`,
+ * Parses a `TORRGATE_TRUST_PROXY` value into an Express `trust proxy` setting: `true`/`false`,
  * a hop count, or an address/subnet list such as `loopback, 10.0.0.0/8`.
  * On Vercel, where the platform overwrites `X-Forwarded-For` with the real client
  * address, all proxies are trusted when nothing is configured.
@@ -72,12 +72,7 @@ export function parseTrustProxy(
 export function findTrackerAccountVariables(env: NodeJS.ProcessEnv = process.env): string[] {
   return Object.keys(env)
     .filter(name => Boolean(env[name]))
-    .filter(
-      name =>
-        /^TORRGATE_.+_(?:COOKIE|PASSWORD|USERNAME)$/.test(name) ||
-        name === 'TRACKER_PASSWORD' ||
-        name === 'TRACKER_USERNAME'
-    )
+    .filter(name => /^TORRGATE_.+_(?:COOKIE|PASSWORD|USERNAME)$/.test(name))
     .sort();
 }
 
@@ -97,8 +92,8 @@ export function getUnprotectedAccountWarning(
     return undefined;
   }
   return (
-    `[TorrGate] API_KEY is not set, but tracker accounts are configured (${accountVariables.join(', ')}). ` +
-    'Anyone who can reach this server can search and download through those accounts. Set API_KEY to require a key.'
+    `[TorrGate] TORRGATE_API_KEY is not set, but tracker accounts are configured (${accountVariables.join(', ')}). ` +
+    'Anyone who can reach this server can search and download through those accounts. Set TORRGATE_API_KEY to require a key.'
   );
 }
 
@@ -113,7 +108,7 @@ export function parseCorsOrigin(value: string | undefined): string | undefined {
       return url.origin;
     }
   } catch {}
-  throw new Error('CORS_ORIGIN must be * or a single HTTP(S) origin');
+  throw new Error('TORRGATE_CORS_ORIGIN must be * or a single HTTP(S) origin');
 }
 
 /**
@@ -122,39 +117,40 @@ export function parseCorsOrigin(value: string | undefined): string | undefined {
 export function loadConfig(): ServerConfig {
   const argv = yargs(hideBin(process.argv))
     .option('apiKey', {
-      default: process.env.API_KEY,
+      default: process.env.TORRGATE_API_KEY,
       description: 'API key for protecting Jackett indexer endpoints',
       type: 'string',
     })
     .option('cacheTtl', {
-      default: process.env.CACHE_TTL_SECONDS !== undefined ? Number(process.env.CACHE_TTL_SECONDS) : 300,
+      default: process.env.TORRGATE_CACHE_TTL_SECONDS !== undefined ? Number(process.env.TORRGATE_CACHE_TTL_SECONDS) : 300,
       description: 'Search and RSS cache TTL in seconds (0 to disable)',
       type: 'number',
     })
     .option('corsOrigin', {
-      default: process.env.CORS_ORIGIN,
+      default: process.env.TORRGATE_CORS_ORIGIN,
       description: 'Allowed browser origin for CORS (* for all origins)',
       type: 'string',
     })
     .option('host', {
-      default: process.env.HOST || '0.0.0.0',
+      default: process.env.TORRGATE_HOST || '0.0.0.0',
       description: 'Host address to bind',
       type: 'string',
     })
     .option('maxConcurrentRequests', {
-      default: process.env.MAX_CONCURRENT_REQUESTS !== undefined ? Number(process.env.MAX_CONCURRENT_REQUESTS) : 10,
+      default: process.env.TORRGATE_MAX_CONCURRENT_REQUESTS !== undefined ? Number(process.env.TORRGATE_MAX_CONCURRENT_REQUESTS) : 10,
       description: 'Maximum concurrent upstream requests across all trackers',
       type: 'number',
     })
     .option('port', {
       alias: 'p',
-      default: Number(process.env.PORT) || 8443,
+      default: Number(process.env.TORRGATE_PORT ?? process.env.PORT) || 8443,
       description: 'Server port',
       type: 'number',
     })
     .option('proxy', {
       alias: 'x',
       default:
+        process.env.TORRGATE_PROXY ||
         process.env.HTTPS_PROXY ||
         process.env.HTTP_PROXY ||
         process.env.https_proxy ||
@@ -163,21 +159,21 @@ export function loadConfig(): ServerConfig {
       type: 'string',
     })
     .option('timeout', {
-      default: Number(process.env.REQUEST_TIMEOUT_MS) || 10000,
+      default: Number(process.env.TORRGATE_REQUEST_TIMEOUT_MS) || 10000,
       description: 'Upstream request timeout in milliseconds',
       type: 'number',
     })
     .parseSync();
 
   if (!Number.isSafeInteger(argv.maxConcurrentRequests) || argv.maxConcurrentRequests < 1) {
-    throw new Error('MAX_CONCURRENT_REQUESTS must be a positive safe integer');
+    throw new Error('TORRGATE_MAX_CONCURRENT_REQUESTS must be a positive safe integer');
   }
 
-  const kvRestApiToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || undefined;
-  const kvRestApiUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || undefined;
+  const kvRestApiToken = process.env.TORRGATE_KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || undefined;
+  const kvRestApiUrl = process.env.TORRGATE_KV_REST_API_URL || process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || undefined;
 
   const config: ServerConfig = {
-    apiKey: argv.apiKey || process.env.API_KEY || undefined,
+    apiKey: argv.apiKey || process.env.TORRGATE_API_KEY || undefined,
     cacheTtlSeconds: Number.isFinite(argv.cacheTtl) ? Number(argv.cacheTtl) : 300,
     corsOrigin: parseCorsOrigin(argv.corsOrigin),
     host: argv.host,
@@ -186,7 +182,7 @@ export function loadConfig(): ServerConfig {
     maxConcurrentRequests: argv.maxConcurrentRequests,
     port: argv.port,
     requestTimeoutMs: argv.timeout,
-    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+    trustProxy: parseTrustProxy(process.env.TORRGATE_TRUST_PROXY),
   };
 
   if (argv.proxy) {

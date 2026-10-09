@@ -16,7 +16,9 @@ describe('HttpClient', () => {
 
   before(async () => {
     testServer = http.createServer((req, res) => {
-      if (req.url === '/test-status-403' && req.method === 'GET') {
+      if (req.url === '/test-user-agent') {
+        res.end(req.headers['user-agent']);
+      } else if (req.url === '/test-status-403' && req.method === 'GET') {
         res.writeHead(403, { 'Content-Type': 'text/plain' });
         res.end('Forbidden Access');
       } else if (req.url === '/test-status-500' && req.method === 'GET') {
@@ -58,6 +60,16 @@ describe('HttpClient', () => {
     await new Promise<void>(resolve => {
       testServer.close(() => resolve());
     });
+  });
+
+  it('should send the prefixed User-Agent setting', async () => {
+    const originalEnv = { ...process.env };
+    process.env.TORRGATE_USER_AGENT = 'SampleTrackerClient/1.0';
+    try {
+      assert.equal(await new HttpClient().get(`${baseUrl}/test-user-agent`), 'SampleTrackerClient/1.0');
+    } finally {
+      process.env = originalEnv;
+    }
   });
 
   it('should throw AxiosError for 4xx and 5xx status codes by default', async () => {

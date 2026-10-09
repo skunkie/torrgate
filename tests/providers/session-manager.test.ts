@@ -474,6 +474,47 @@ describe('SessionManager', () => {
     }
   });
 
+  it('should log in with global prefixed credentials and per-tracker overrides', async () => {
+    const originalEnv = { ...process.env };
+    Object.assign(process.env, {
+      TORRGATE_TRACKER_PASSWORD: 'global-password',
+      TORRGATE_TRACKER_USERNAME: 'global-user',
+    });
+    const definition: CardigannDefinition = {
+      id: 'credentialtracker',
+      links: [baseUrl],
+      login: {
+        inputs: {
+          password: '{{ .Config.password }}',
+          username: '{{ .Config.username }}',
+        },
+        path: 'login',
+      },
+      name: 'Credential Tracker',
+      search: { fields: {}, paths: [{ path: '/' }], rows: { selector: 'tr' } },
+    };
+    const httpClient = new HttpClient();
+    const loginForms: Record<string, string>[] = [];
+    httpClient.postForm = async (_url, formData) => {
+      loginForms.push(formData);
+      return { content: 'Welcome', cookies: ['session_id=sample-session'], headers: {}, status: 200 };
+    };
+    try {
+      const globalSession = new SessionManager(definition, httpClient);
+      assert.equal(globalSession.hasLoginCredentials(), true);
+      assert.equal(await globalSession.ensureAuthenticated(baseUrl), true);
+      assert.deepEqual(loginForms[0], { password: 'global-password', username: 'global-user' });
+      process.env.TORRGATE_CREDENTIALTRACKER_PASSWORD = 'tracker-password';
+      process.env.TORRGATE_CREDENTIALTRACKER_USERNAME = 'tracker-user';
+      const trackerSession = new SessionManager(definition, httpClient);
+      assert.equal(trackerSession.hasLoginCredentials(), true);
+      assert.equal(await trackerSession.ensureAuthenticated(baseUrl), true);
+      assert.deepEqual(loginForms[1], { password: 'tracker-password', username: 'tracker-user' });
+    } finally {
+      process.env = originalEnv;
+    }
+  });
+
   it('should deduplicate concurrent login requests', async () => {
     let postFormCalls = 0;
     const testHttpClient = {

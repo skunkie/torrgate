@@ -35,11 +35,11 @@ import { renderTemplate } from './template.js';
 import { CardigannDefinition, TemplateContext } from './types.js';
 
 /**
- * Reads the tracker's time zone from `<prefix>_TIMEZONE` or `TRACKER_TIMEZONE`, falling back
+ * Reads the tracker's time zone from `<prefix>_TIMEZONE` or `TORRGATE_TRACKER_TIMEZONE`, falling back
  * to the default when unset or not a valid IANA name.
  */
 function resolveTrackerTimeZone(envVarPrefix: string): string {
-  const configured = process.env[`${envVarPrefix}_TIMEZONE`] || process.env.TRACKER_TIMEZONE;
+  const configured = process.env[`${envVarPrefix}_TIMEZONE`] || process.env.TORRGATE_TRACKER_TIMEZONE;
   if (!configured) {
     return DEFAULT_TRACKER_TIME_ZONE;
   }

@@ -80,36 +80,40 @@ The server will be available at:
 
 ## Configuration
 
-TorrGate can be configured via environment variables or a `.env` file:
+TorrGate can be configured via environment variables or a `.env` file. Application settings use the `TORRGATE_` prefix; CLI flags override their corresponding environment settings:
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `API_KEY` | *(none)* | API key for protecting indexer endpoints (via `?apikey=...`, `X-Api-Key` header, or `Authorization: Bearer`). Optional, but required in practice whenever tracker accounts are configured. A client that sends five wrong keys within a minute gets HTTP 429 until the minute is up |
-| `CACHE_TTL_SECONDS` | `300` | Search and RSS cache TTL in seconds (0 to disable) |
-| `CORS_ORIGIN` | `*` | Allowed browser origin, such as `https://client.example`, or `*` for all origins. CLI `--corsOrigin` overrides this value |
-| `HOST` | `0.0.0.0` | Bind address |
-| `HTTP_PROXY` | *(none)* | Outbound HTTP proxy URL (e.g. `http://127.0.0.1:8888`) |
-| `HTTPS_PROXY` | *(none)* | Outbound HTTPS proxy URL (e.g. `http://user:pass@proxy.example.com:8080`). Only `http://` and `https://` proxies are supported; HTTPS sites are tunnelled with `CONNECT` and plain-HTTP sites are forwarded as ordinary proxy requests |
-| `KV_REST_API_TOKEN` | *(none)* | Upstash Redis REST token for persistent serverless cache; also holds tracker request delays across serverless instances |
-| `KV_REST_API_URL` | *(none)* | Upstash Redis REST URL (e.g. `https://your-db.upstash.io`) |
-| `MAX_CONCURRENT_REQUESTS` | `10` | Positive integer limit for concurrent upstream requests shared across all trackers in each application instance. CLI `--maxConcurrentRequests` overrides this value |
-| `PORT` | `8443` | Server port number |
-| `REQUEST_TIMEOUT_MS` | `10000` | HTTP request timeout in milliseconds |
 | `TORRGATE_<ID>_COOKIE` | *(none)* | Session cookies for semi-private trackers (e.g. `TORRGATE_SAMPLE_TRACKER_ORG_COOKIE`) |
 | `TORRGATE_<ID>_PASSWORD` | *(none)* | Account password for semi-private trackers |
-| `TORRGATE_<ID>_TIMEZONE` | *(`TRACKER_TIMEZONE`)* | IANA time zone in which that tracker shows release times |
+| `TORRGATE_<ID>_TIMEZONE` | *(`TORRGATE_TRACKER_TIMEZONE`)* | IANA time zone in which that tracker shows release times |
 | `TORRGATE_<ID>_USERNAME` | *(none)* | Account username for semi-private trackers |
-| `TRACKER_TIMEZONE` | `Europe/Moscow` | IANA time zone for tracker times that carry no zone, used to turn them into exact publish dates |
-| `TRUST_PROXY` | *(none; `true` on Vercel)* | Express `trust proxy` value (`true`, a hop count, or addresses such as `loopback, 10.0.0.0/8`). Configure it for trusted reverse proxies so failed-key throttling sees each client's real address and HTTPS sign-in responses set the Secure cookie flag. Forwarded protocol headers from untrusted clients are ignored |
-| `USER_AGENT` | *(Chrome)* | Custom User-Agent header (recommended to match browser if using session cookies) |
+| `TORRGATE_API_KEY` | *(none)* | API key for protecting indexer endpoints (via `?apikey=...`, `X-Api-Key` header, or `Authorization: Bearer`). Optional, but required in practice whenever tracker accounts are configured. A client that sends five wrong keys within a minute gets HTTP 429 until the minute is up |
+| `TORRGATE_CACHE_TTL_SECONDS` | `300` | Search and RSS cache TTL in seconds (0 to disable) |
+| `TORRGATE_CORS_ORIGIN` | `*` | Allowed browser origin, such as `https://client.example`, or `*` for all origins. CLI `--corsOrigin` overrides this value |
+| `TORRGATE_HOST` | `0.0.0.0` | Bind address |
+| `TORRGATE_KV_REST_API_TOKEN` | *(none)* | Upstash Redis REST token for persistent serverless cache; also holds tracker request delays across serverless instances |
+| `TORRGATE_KV_REST_API_URL` | *(none)* | Upstash Redis REST URL (e.g. `https://your-db.upstash.io`) |
+| `TORRGATE_MAX_CONCURRENT_REQUESTS` | `10` | Positive integer limit for concurrent upstream requests shared across all trackers in each application instance. CLI `--maxConcurrentRequests` overrides this value |
+| `TORRGATE_PORT` | `8443` | Server port number |
+| `TORRGATE_PROXY` | *(none)* | Outbound HTTP/HTTPS proxy URL (e.g. `http://user:pass@proxy.example.com:8080`). Only `http://` and `https://` proxies are supported; HTTPS sites are tunnelled with `CONNECT` and plain-HTTP sites are forwarded as ordinary proxy requests |
+| `TORRGATE_REQUEST_TIMEOUT_MS` | `10000` | HTTP request timeout in milliseconds |
+| `TORRGATE_TRACKER_PASSWORD` | *(none)* | Default account password, overridden by tracker-specific credentials |
+| `TORRGATE_TRACKER_TIMEZONE` | `Europe/Moscow` | IANA time zone for tracker times that carry no zone, used to turn them into exact publish dates |
+| `TORRGATE_TRACKER_USERNAME` | *(none)* | Default account username, overridden by tracker-specific credentials |
+| `TORRGATE_TRUST_PROXY` | *(none; `true` on Vercel)* | Express `trust proxy` value (`true`, a hop count, or addresses such as `loopback, 10.0.0.0/8`). Configure it for trusted reverse proxies so failed-key throttling sees each client's real address and HTTPS sign-in responses set the Secure cookie flag. Forwarded protocol headers from untrusted clients are ignored |
+| `TORRGATE_USER_AGENT` | *(Chrome)* | Custom User-Agent header (recommended to match browser if using session cookies) |
+| `TORRGATE_VERSION` | *(package version)* | API version shown in the OpenAPI specification; accepts release tags such as `v1.2.3` |
 
-See [.env.example](.env.example) for a pre-configured template.
+Hosting and integration defaults retain their standard names: `TORRGATE_PORT` falls back to `PORT`; `TORRGATE_PROXY` falls back to `HTTPS_PROXY`, `HTTP_PROXY`, `https_proxy`, then `http_proxy`. Redis settings fall back to `KV_REST_API_TOKEN` / `KV_REST_API_URL`, then `UPSTASH_REDIS_REST_TOKEN` / `UPSTASH_REDIS_REST_URL`. Prefixed Redis values take precedence. Vercel is detected through `VERCEL`, and the API version falls back to `npm_package_version`.
 
-Browser sign-in issues a signed session cookie valid for seven days. Sign out clears the cookie from the browser. Sessions are stateless: a copied token remains valid until it expires, including after sign-out or a server restart. To invalidate existing tokens, rotate `API_KEY` on every gateway instance using that key; API clients must then use the replacement key.
+See [.env.example](.env.example) for a pre-configured template. Rename unprefixed application settings to the names above; application settings require the prefix.
+
+Browser sign-in issues a signed session cookie valid for seven days. Sign out clears the cookie from the browser. Sessions are stateless: a copied token remains valid until it expires, including after sign-out or a server restart. To invalidate existing tokens, rotate `TORRGATE_API_KEY` on every gateway instance using that key; API clients must then use the replacement key.
 
 Failed API-key attempts on the API and sign-in form share a limit per IPv4 address or IPv6 `/64` network. IPv4-mapped IPv6 addresses use their underlying IPv4 address. Users on the same IPv6 network share the limit, so repeated failures from one device can temporarily block sign-in on another.
 
-Jackett-compatible feed and download URLs can carry API keys in query strings, which may be recorded in browser history or access logs. Redact those parameters from logs and avoid sharing keyed URLs; prefer `X-Api-Key` or Bearer authentication for direct API calls. `CORS_ORIGIN` restricts browser access to cross-origin responses and complements API-key authentication; it does not protect keys appearing in URLs.
+Jackett-compatible feed and download URLs can carry API keys in query strings, which may be recorded in browser history or access logs. Redact those parameters from logs and avoid sharing keyed URLs; prefer `X-Api-Key` or Bearer authentication for direct API calls. `TORRGATE_CORS_ORIGIN` restricts browser access to cross-origin responses and complements API-key authentication; it does not protect keys appearing in URLs.
 
 ### Tracker Environment Variable Derivation
 
@@ -127,7 +131,7 @@ Tracker-specific credentials and session cookies are derived dynamically from th
   - `TORRGATE_SAMPLE_TRACKER_ORG_USERNAME="sample_user"`
   - `TORRGATE_SAMPLE_TRACKER_ORG_PASSWORD="sample_password"`
 
-> **Set `API_KEY` whenever tracker accounts are configured.** Without it, anyone who can reach the server can search and download through those accounts. TorrGate logs a warning at startup in that situation. The server listens on all interfaces (`HOST=0.0.0.0`) by default.
+> **Set `TORRGATE_API_KEY` whenever tracker accounts are configured.** Without it, anyone who can reach the server can search and download through those accounts. TorrGate logs a warning at startup in that situation. The server listens on all interfaces (`TORRGATE_HOST=0.0.0.0`) by default.
 
 ### Connecting Sonarr, Radarr and Prowlarr
 
@@ -135,7 +139,7 @@ Add TorrGate as a **Torznab** indexer (in Prowlarr: *Generic Torznab*):
 
 - **URL:** `https://<your-host>/api/v2.0/indexers/<indexer>/results/torznab/`, where `<indexer>` is an indexer id from `GET /api/v2.0/indexers` (for example `rutor`), or `all` to search every indexer through one feed. The web client's *Connect Apps* dialog shows these URLs for your server.
 - **API Path:** `/api`
-- **API Key:** the value of `API_KEY`, or anything if no key is configured.
+- **API Key:** the value of `TORRGATE_API_KEY`, or anything if no key is configured.
 - **Categories:** a parent category such as `5000` (TV) or `2000` (Movies) matches all of its subcategories, while a subcategory such as `5040` (TV/HD) matches only tracker categories mapped to it. Many tracker categories map to the plain parent, so include `5000` for Sonarr and `2000` for Radarr alongside any subcategories. Tracker-specific categories are listed in each indexer's caps under `100000 + id`.
 
 Errors on Torznab URLs are returned as Torznab `<error>` documents: code `100` for a missing or wrong API key, `500` when the client is temporarily blocked after repeated wrong keys, `201` for an unknown indexer or an invalid `limit`, `offset` or `page`, and `900` when the tracker could not be searched.

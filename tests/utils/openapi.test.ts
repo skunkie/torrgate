@@ -32,20 +32,11 @@ describe('OpenAPI Spec Injector', () => {
 
   it('should inject version from TORRGATE_VERSION, stripping the v prefix', () => {
     const spec = getOpenApiSpec({
-      env: { OPENAPI_VERSION: '2.0.0', TORRGATE_VERSION: 'v3.1.2' },
+      env: { TORRGATE_VERSION: 'v3.1.2' },
       filePath: tempYamlPath,
       forceReload: true,
     });
     assert.match(spec, /version: 3\.1\.2/);
-  });
-
-  it('should fall back to OPENAPI_VERSION when TORRGATE_VERSION is absent', () => {
-    const spec = getOpenApiSpec({
-      env: { OPENAPI_VERSION: '2.5.0' },
-      filePath: tempYamlPath,
-      forceReload: true,
-    });
-    assert.match(spec, /version: 2\.5\.0/);
   });
 
   it('should fall back to npm_package_version', () => {

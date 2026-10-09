@@ -27,7 +27,7 @@ function isValidVersionString(version: string): boolean {
 }
 
 function resolveVersion(env: NodeJS.ProcessEnv): string {
-  const explicit = env.TORRGATE_VERSION || env.OPENAPI_VERSION;
+  const explicit = env.TORRGATE_VERSION;
   if (explicit && isValidVersionString(explicit)) return cleanVersionTag(explicit);
 
   if (env.npm_package_version && isValidVersionString(env.npm_package_version)) {

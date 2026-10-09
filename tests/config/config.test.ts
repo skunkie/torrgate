@@ -18,19 +18,24 @@ describe('Server Configuration Loader', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    delete process.env.API_KEY;
-    delete process.env.CACHE_TTL_SECONDS;
-    delete process.env.CORS_ORIGIN;
-    delete process.env.HOST;
+    delete process.env.TORRGATE_API_KEY;
+    delete process.env.TORRGATE_CACHE_TTL_SECONDS;
+    delete process.env.TORRGATE_CORS_ORIGIN;
+    delete process.env.TORRGATE_HOST;
     delete process.env.HTTP_PROXY;
     delete process.env.HTTPS_PROXY;
     delete process.env.http_proxy;
     delete process.env.https_proxy;
     delete process.env.KV_REST_API_TOKEN;
     delete process.env.KV_REST_API_URL;
-    delete process.env.MAX_CONCURRENT_REQUESTS;
+    delete process.env.TORRGATE_MAX_CONCURRENT_REQUESTS;
     delete process.env.PORT;
-    delete process.env.REQUEST_TIMEOUT_MS;
+    delete process.env.TORRGATE_PORT;
+    delete process.env.TORRGATE_PROXY;
+    delete process.env.TORRGATE_KV_REST_API_TOKEN;
+    delete process.env.TORRGATE_KV_REST_API_URL;
+    delete process.env.TORRGATE_TRUST_PROXY;
+    delete process.env.TORRGATE_REQUEST_TIMEOUT_MS;
     delete process.env.UPSTASH_REDIS_REST_TOKEN;
     delete process.env.UPSTASH_REDIS_REST_URL;
   });
@@ -53,14 +58,74 @@ describe('Server Configuration Loader', () => {
     assert.equal(config.proxy, undefined);
   });
 
+  it('should load prefixed settings and override platform defaults', () => {
+    Object.assign(process.env, {
+      HTTPS_PROXY: 'http://platform-proxy.example:8080',
+      KV_REST_API_TOKEN: 'platform-token',
+      KV_REST_API_URL: 'https://platform-cache.example',
+      PORT: '9000',
+      TORRGATE_API_KEY: 'sample-key',
+      TORRGATE_CACHE_TTL_SECONDS: '0',
+      TORRGATE_HOST: '127.0.0.1',
+      TORRGATE_KV_REST_API_TOKEN: 'sample-token',
+      TORRGATE_KV_REST_API_URL: 'https://sample-cache.example',
+      TORRGATE_PORT: '8088',
+      TORRGATE_PROXY: 'http://sample-proxy.example:3128',
+      TORRGATE_REQUEST_TIMEOUT_MS: '2500',
+      TORRGATE_TRUST_PROXY: 'false',
+    });
+
+    const config = loadConfig();
+    assert.equal(config.apiKey, 'sample-key');
+    assert.equal(config.cacheTtlSeconds, 0);
+    assert.equal(config.host, '127.0.0.1');
+    assert.equal(config.kvRestApiToken, 'sample-token');
+    assert.equal(config.kvRestApiUrl, 'https://sample-cache.example');
+    assert.equal(config.port, 8088);
+    assert.equal(config.proxy?.url, 'http://sample-proxy.example:3128/');
+    assert.equal(config.requestTimeoutMs, 2500);
+    assert.equal(config.trustProxy, false);
+  });
+
+  it('should use the hosting platform port when no override is configured', () => {
+    process.env.PORT = '9000';
+    assert.equal(loadConfig().port, 9000);
+  });
+
+  it('should allow CLI flags to override prefixed environment settings', () => {
+    Object.assign(process.env, {
+      TORRGATE_API_KEY: 'environment-key',
+      TORRGATE_CACHE_TTL_SECONDS: '600',
+      TORRGATE_HOST: '0.0.0.0',
+      TORRGATE_PORT: '8088',
+      TORRGATE_PROXY: 'http://environment-proxy.example:3128',
+      TORRGATE_REQUEST_TIMEOUT_MS: '2500',
+    });
+    const originalArgs = process.argv;
+    try {
+      process.argv = ['node', 'torrgate', '--apiKey', 'cli-key', '--cacheTtl', '0',
+        '--host', '127.0.0.1', '--port', '8080', '--proxy', 'http://cli-proxy.example:8080',
+        '--timeout', '1500'];
+      const config = loadConfig();
+      assert.equal(config.apiKey, 'cli-key');
+      assert.equal(config.cacheTtlSeconds, 0);
+      assert.equal(config.host, '127.0.0.1');
+      assert.equal(config.port, 8080);
+      assert.equal(config.proxy?.url, 'http://cli-proxy.example:8080/');
+      assert.equal(config.requestTimeoutMs, 1500);
+    } finally {
+      process.argv = originalArgs;
+    }
+  });
+
   it('should load the upstream concurrency limit from the environment', () => {
-    process.env.MAX_CONCURRENT_REQUESTS = '3';
+    process.env.TORRGATE_MAX_CONCURRENT_REQUESTS = '3';
     assert.equal(loadConfig().maxConcurrentRequests, 3);
   });
 
   it('should let the concurrency CLI option override the environment', () => {
     const originalArgs = process.argv;
-    process.env.MAX_CONCURRENT_REQUESTS = '3';
+    process.env.TORRGATE_MAX_CONCURRENT_REQUESTS = '3';
     try {
       process.argv = ['node', 'torrgate', '--maxConcurrentRequests', '2'];
       assert.equal(loadConfig().maxConcurrentRequests, 2);
@@ -71,19 +136,19 @@ describe('Server Configuration Loader', () => {
 
   it('should reject invalid upstream concurrency limits at startup', () => {
     for (const value of ['0', '-1', '1.5', 'NaN', 'Infinity', '9007199254740992']) {
-      process.env.MAX_CONCURRENT_REQUESTS = value;
+      process.env.TORRGATE_MAX_CONCURRENT_REQUESTS = value;
       assert.throws(() => loadConfig(), /positive safe integer/);
     }
   });
 
-  it('should load and normalize CORS_ORIGIN from the environment', () => {
-    process.env.CORS_ORIGIN = ' https://client.example:443/ ';
+  it('should load and normalize TORRGATE_CORS_ORIGIN from the environment', () => {
+    process.env.TORRGATE_CORS_ORIGIN = ' https://client.example:443/ ';
     assert.equal(loadConfig().corsOrigin, 'https://client.example');
   });
 
   it('should let the CORS CLI option override the environment', () => {
     const originalArgs = process.argv;
-    process.env.CORS_ORIGIN = 'https://environment.example';
+    process.env.TORRGATE_CORS_ORIGIN = 'https://environment.example';
     try {
       process.argv = ['node', 'torrgate', '--corsOrigin', 'https://cli.example:8443'];
       assert.equal(loadConfig().corsOrigin, 'https://cli.example:8443');
@@ -93,7 +158,7 @@ describe('Server Configuration Loader', () => {
   });
 
   it('should reject invalid CORS configuration at startup', () => {
-    process.env.CORS_ORIGIN = 'https://client.example/private';
+    process.env.TORRGATE_CORS_ORIGIN = 'https://client.example/private';
     assert.throws(() => loadConfig(), /single HTTP\(S\) origin/);
   });
 
@@ -210,16 +275,23 @@ describe('Unprotected tracker account warning', () => {
     PORT: '8443',
     TORRGATE_SAMPLE_TRACKER_COOKIE: 'bb_session=sample',
     TORRGATE_SAMPLE_TRACKER_TIMEZONE: 'Europe/Moscow',
-    TRACKER_PASSWORD: '',
+    TORRGATE_TRACKER_PASSWORD: '',
   };
 
   it('should list only variables that configure an account', () => {
     assert.deepEqual(findTrackerAccountVariables(sampleEnv), ['TORRGATE_SAMPLE_TRACKER_COOKIE']);
   });
 
+  it('should detect global prefixed tracker credentials', () => {
+    assert.deepEqual(findTrackerAccountVariables({
+      TORRGATE_TRACKER_PASSWORD: 'sample-password',
+      TORRGATE_TRACKER_USERNAME: 'sample-user',
+    }), ['TORRGATE_TRACKER_PASSWORD', 'TORRGATE_TRACKER_USERNAME']);
+  });
+
   it('should warn when accounts are configured without an API key', () => {
     const warning = getUnprotectedAccountWarning({ apiKey: undefined }, sampleEnv);
-    assert.match(warning ?? '', /API_KEY is not set.*TORRGATE_SAMPLE_TRACKER_COOKIE/);
+    assert.match(warning ?? '', /TORRGATE_API_KEY is not set.*TORRGATE_SAMPLE_TRACKER_COOKIE/);
   });
 
   it('should stay quiet with an API key or without accounts', () => {

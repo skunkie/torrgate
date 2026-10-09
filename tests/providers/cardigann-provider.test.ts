@@ -813,6 +813,18 @@ describe('CardigannProvider time zones', () => {
     assert.equal(item.date, '2024-08-15T09:30:00.000Z');
   });
 
+  it('should use the global prefixed time zone with per-tracker overrides', () => {
+    const originalEnv = { ...process.env };
+    process.env.TORRGATE_TRACKER_TIMEZONE = 'Asia/Tokyo';
+    try {
+      assert.equal(new CardigannProvider(zoneDefinition, new HttpClient()).timeZone, 'Asia/Tokyo');
+      process.env.TORRGATE_ZONETRACKER_TIMEZONE = 'Europe/London';
+      assert.equal(new CardigannProvider(zoneDefinition, new HttpClient()).timeZone, 'Europe/London');
+    } finally {
+      process.env = originalEnv;
+    }
+  });
+
   it('should honour a per-tracker time zone and ignore invalid names', () => {
     process.env.TORRGATE_ZONETRACKER_TIMEZONE = 'Asia/Tokyo';
     try {
