@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 TorrPlay
+#
+# SPDX-License-Identifier: MIT
+
+trackers:
+  - http://retracker.local/announce
+  - udp://opentor.net:6969
+  - udp://bt.rutor.info:2710
+  - udp://bt.rutor.is:2710

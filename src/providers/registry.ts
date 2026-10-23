@@ -1,0 +1,144 @@
+// SPDX-FileCopyrightText: 2026 TorrPlay
+//
+// SPDX-License-Identifier: MIT
+
+import path from 'path';
+
+import { BatchCacheStore, CacheStore, CacheWrite } from '../cache/store.js';
+import { getTopicPathStore } from '../cache/topic-path-cache.js';
+import { HttpClient } from '../http/http-client.js';
+import { RequestSlotStore } from '../http/request-throttle.js';
+import {
+  ProviderCheckResult,
+  ProviderInfo,
+  TrackerProvider,
+} from '../types/provider.js';
+import { loadDefinitionsFromDir } from './cardigann/loader.js';
+import { CardigannProvider } from './cardigann/provider.js';
+
+/**
+ * Indexer id that the API routes treat as "every indexer".
+ */
+export const AGGREGATE_INDEXER_ID = 'all';
+
+/**
+ * Registry holding and managing tracker scraper providers loaded from Cardigann definitions.
+ */
+export class ProviderRegistry {
+  private readonly lookup: Map<string, TrackerProvider> = new Map();
+  private sharedTopicPaths?: BatchCacheStore;
+  private topicPathTtlSeconds = 300;
+  private readonly uniqueProviders: Map<string, TrackerProvider> = new Map();
+
+  constructor(
+    httpClient: HttpClient,
+    definitionsDir: string = path.resolve(process.cwd(), 'definitions')
+  ) {
+    const providers = loadDefinitionsFromDir(definitionsDir, httpClient);
+    for (const provider of providers) {
+      const key = (provider.id || provider.name).toLowerCase();
+      if (key === AGGREGATE_INDEXER_ID || provider.name.toLowerCase() === AGGREGATE_INDEXER_ID) {
+        console.warn(`[TorrGate] Skipping definition '${provider.name}': '${AGGREGATE_INDEXER_ID}' is reserved for searching every indexer`);
+        continue;
+      }
+      if (this.uniqueProviders.has(key)) {
+        console.warn(`[TorrGate] Skipping definition '${provider.name}': another definition already uses the id '${key}'`);
+        continue;
+      }
+      this.registerProvider(provider);
+    }
+  }
+
+  /**
+   * Registers an additional or replacement tracker provider.
+   * Throws when the id or name is the reserved aggregate id `all`.
+   */
+  registerProvider(provider: TrackerProvider): void {
+    if (
+      (provider.id || '').toLowerCase() === AGGREGATE_INDEXER_ID ||
+      provider.name.toLowerCase() === AGGREGATE_INDEXER_ID
+    ) {
+      throw new Error(`'${AGGREGATE_INDEXER_ID}' is reserved for searching every indexer`);
+    }
+    const primaryKey = (provider.id || provider.name).toLowerCase();
+    this.uniqueProviders.set(primaryKey, provider);
+
+    const nameKey = provider.name.toLowerCase();
+    this.lookup.set(nameKey, provider);
+
+    if (provider.id) {
+      this.lookup.set(provider.id.toLowerCase(), provider);
+    }
+  }
+
+  /**
+   * Checks availability of all registered providers concurrently.
+   */
+  async checkAllAvailability(): Promise<ProviderCheckResult[]> {
+    const checks = this.getAllProviders().map(p => p.checkAvailability());
+    return Promise.all(checks);
+  }
+
+  /**
+   * Retrieves all registered providers.
+   */
+  getAllProviders(): TrackerProvider[] {
+    return Array.from(this.uniqueProviders.values());
+  }
+
+  /**
+   * Retrieves provider metadata for all registered providers.
+   */
+  getProviderInfos(): ProviderInfo[] {
+    return this.getAllProviders().map(provider => ({
+      caps: provider.caps,
+      id: provider.id || provider.name.toLowerCase(),
+      isConfigured: provider.isConfigured ?? true,
+      name: provider.name,
+      type: provider.type ?? 'public',
+      urls: provider.urls,
+    }));
+  }
+
+  /**
+   * Holds each definition's `requestDelay` across every process sharing `store`.
+   */
+  shareRequestDelays(store: RequestSlotStore): void {
+    for (const provider of this.getAllProviders()) {
+      if (provider instanceof CardigannProvider) {
+        provider.shareRequestDelay(store);
+      }
+    }
+  }
+
+  async restoreTopicPaths(topicPaths: Record<string, CacheWrite<string>[]>): Promise<void> {
+    const restoredEntries: CacheWrite<string>[] = [];
+    for (const [providerId, entries] of Object.entries(topicPaths)) {
+      const provider = this.getProvider(providerId);
+      if (!provider?.restoreTopicPaths) continue;
+      provider.restoreTopicPaths(entries);
+      restoredEntries.push(...entries);
+    }
+    await this.sharedTopicPaths?.setMany(restoredEntries, this.topicPathTtlSeconds);
+  }
+
+  /**
+   * Configures shared topic-path storage and its lifetime for every Cardigann provider.
+   */
+  shareTopicPaths(store: CacheStore, namespace: string, cacheTtlSeconds: number): void {
+    this.sharedTopicPaths = getTopicPathStore(store);
+    this.topicPathTtlSeconds = cacheTtlSeconds + 300;
+    for (const provider of this.getAllProviders()) {
+      if (provider instanceof CardigannProvider) {
+        provider.shareTopicPaths(store, namespace, cacheTtlSeconds);
+      }
+    }
+  }
+
+  /**
+   * Resolves a provider by its name or identifier (case-insensitive).
+   */
+  getProvider(name: string): TrackerProvider | undefined {
+    return this.lookup.get(name.toLowerCase());
+  }
+}

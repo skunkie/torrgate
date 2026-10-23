@@ -1,0 +1,90 @@
+// SPDX-FileCopyrightText: 2026 TorrPlay
+//
+// SPDX-License-Identifier: MIT
+
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import { ESLint } from 'eslint';
+
+import { WEB_CLIENT_SCRIPT } from '../../src/web/client/web-client-script.js';
+import { CLIENT_PLUGINS_SCRIPT } from '../../src/web/plugins/client-plugins-script.js';
+import { PLUGIN_SETTINGS_SCRIPT } from '../../src/web/plugins/plugin-settings-script.js';
+import { QBITTORRENT_PLUGIN_SCRIPT } from '../../src/web/plugins/qbittorrent-plugin-script.js';
+import { TORRPLAY_PLUGIN_SCRIPT } from '../../src/web/plugins/torrplay-plugin-script.js';
+import { THEME_SCRIPT } from '../../src/web/shared/theme-script.js';
+
+describe('Module boundaries', () => {
+  const eslint = new ESLint({ overrideConfig: [{ languageOptions: { parserOptions: { projectService: false } } }] });
+
+  for (const [filePath, source] of [
+    ['src/jackett/sample.ts', "import '../api/routes.js';"],
+    ['src/jackett/sample.ts', "import '../providers/cardigann/template.js';"],
+    ['src/search/sample.ts', "import '../providers/cardigann/provider.js';"],
+    ['src/providers/cardigann/sample.ts', "import '../../web/assets.js';"],
+    ['src/web/sample.ts', "import '../api/routes.js';"],
+  ]) {
+    it(`should reject ${source} from ${filePath}`, async () => {
+      const [result] = await eslint.lintText(source, { filePath });
+      assert.ok(result.messages.some(message => message.ruleId === 'no-restricted-imports'));
+    });
+  }
+
+  it('should allow search and protocol modules to consume shared provider contracts', async () => {
+    for (const filePath of ['src/jackett/sample.ts', 'src/search/sample.ts']) {
+      const [result] = await eslint.lintText("import type { TrackerProvider } from '../types/provider.js';", { filePath });
+      assert.equal(result.messages.some(message => message.ruleId === 'no-restricted-imports'), false);
+    }
+  });
+});
+
+describe('Property ordering rules', () => {
+  const overrideConfig = [{ languageOptions: { parserOptions: { projectService: false } } }];
+  const eslint = new ESLint({ overrideConfig });
+  const fixer = new ESLint({ fix: true, overrideConfig });
+  const filePath = 'src/types/torrent.ts';
+
+  it('should keep embedded browser script properties in alphabetical order', async () => {
+    for (const source of [CLIENT_PLUGINS_SCRIPT, PLUGIN_SETTINGS_SCRIPT, QBITTORRENT_PLUGIN_SCRIPT, THEME_SCRIPT, TORRPLAY_PLUGIN_SCRIPT, WEB_CLIENT_SCRIPT]) {
+      const [result] = await eslint.lintText(source, { filePath });
+      const orderingErrors = result.messages.filter(message =>
+        message.fatal || message.ruleId === 'perfectionist/sort-objects'
+      );
+      assert.deepEqual(orderingErrors, []);
+    }
+  });
+
+  it('should reject reversed Cyrillic properties in objects, types, interfaces, and classes', async () => {
+    const cases = [
+      { rule: 'sort-objects', source: "export const sample = { 'Я': 1, 'А': 2 };\n" },
+      { rule: 'sort-object-types', source: 'export type Sample = { Я: number; А: number };\n' },
+      { rule: 'sort-interfaces', source: 'export interface Sample { Я: number; А: number }\n' },
+      { rule: 'sort-classes', source: 'export class Sample { Я = 1; А = 2; }\n' },
+    ];
+
+    for (const { rule, source } of cases) {
+      const [result] = await eslint.lintText(source, { filePath });
+      assert.ok(result.messages.some(message => message.ruleId === `perfectionist/${rule}`), rule);
+      const [fixed] = await fixer.lintText(source, { filePath });
+      assert.ok(fixed.output && fixed.output.indexOf('А') < fixed.output.indexOf('Я'), rule);
+    }
+  });
+
+  it('should sort mixed Unicode keys in UTF-8 byte order and preserve that order on repeated fixes', async () => {
+    const keys = ['😀', 'Б', '𐀀', 'A', 'А', 'a', 'Ā', 'Ё', '\uE000'];
+    const source = `export const sample = { ${keys.map(key => `'${key}': 1`).join(', ')} };\n`;
+    const [fixed] = await fixer.lintText(source, { filePath });
+    assert.ok(fixed.output);
+    const actualKeys = [...fixed.output.matchAll(/'([^']+)':/g)].map(match => match[1]);
+    const expectedKeys = [...keys].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+    assert.deepEqual(actualKeys, expectedKeys);
+
+    const [repeated] = await fixer.lintText(fixed.output, { filePath });
+    assert.equal(repeated.output, undefined);
+  });
+
+  it('should remove extra empty lines at the end of files', async () => {
+    const [result] = await fixer.lintText('export const sample = 1;\n\n', { filePath });
+    assert.equal(result.output, 'export const sample = 1;\n');
+  });
+});

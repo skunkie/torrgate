@@ -1,0 +1,296 @@
+// SPDX-FileCopyrightText: 2026 TorrPlay
+//
+// SPDX-License-Identifier: MIT
+
+import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, it } from 'node:test';
+
+import {
+  findTrackerAccountVariables,
+  getUnprotectedAccountWarning,
+  loadConfig,
+  parseCorsOrigin,
+  parseProxyUrl,
+  parseTrustProxy,
+} from '../../src/config/config.js';
+
+describe('Server Configuration Loader', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env.TORRGATE_API_KEY;
+    delete process.env.TORRGATE_CACHE_TTL_SECONDS;
+    delete process.env.TORRGATE_CORS_ORIGIN;
+    delete process.env.TORRGATE_HOST;
+    delete process.env.HTTP_PROXY;
+    delete process.env.HTTPS_PROXY;
+    delete process.env.http_proxy;
+    delete process.env.https_proxy;
+    delete process.env.KV_REST_API_TOKEN;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.TORRGATE_MAX_CONCURRENT_REQUESTS;
+    delete process.env.PORT;
+    delete process.env.TORRGATE_PORT;
+    delete process.env.TORRGATE_PROXY;
+    delete process.env.TORRGATE_KV_REST_API_TOKEN;
+    delete process.env.TORRGATE_KV_REST_API_URL;
+    delete process.env.TORRGATE_TRUST_PROXY;
+    delete process.env.TORRGATE_REQUEST_TIMEOUT_MS;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    delete process.env.UPSTASH_REDIS_REST_URL;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('should load default configuration values when no env vars are set', () => {
+    const config = loadConfig();
+    assert.equal(config.host, '0.0.0.0');
+    assert.equal(config.port, 8443);
+    assert.equal(config.maxConcurrentRequests, 10);
+    assert.equal(config.cacheTtlSeconds, 300);
+    assert.equal(config.corsOrigin, undefined);
+    assert.equal(config.requestTimeoutMs, 10000);
+    assert.equal(config.apiKey, undefined);
+    assert.equal(config.kvRestApiToken, undefined);
+    assert.equal(config.kvRestApiUrl, undefined);
+    assert.equal(config.proxy, undefined);
+  });
+
+  it('should load prefixed settings and override platform defaults', () => {
+    Object.assign(process.env, {
+      HTTPS_PROXY: 'http://platform-proxy.example:8080',
+      KV_REST_API_TOKEN: 'platform-token',
+      KV_REST_API_URL: 'https://platform-cache.example',
+      PORT: '9000',
+      TORRGATE_API_KEY: 'sample-key',
+      TORRGATE_CACHE_TTL_SECONDS: '0',
+      TORRGATE_HOST: '127.0.0.1',
+      TORRGATE_KV_REST_API_TOKEN: 'sample-token',
+      TORRGATE_KV_REST_API_URL: 'https://sample-cache.example',
+      TORRGATE_PORT: '8088',
+      TORRGATE_PROXY: 'http://sample-proxy.example:3128',
+      TORRGATE_REQUEST_TIMEOUT_MS: '2500',
+      TORRGATE_TRUST_PROXY: 'false',
+    });
+
+    const config = loadConfig();
+    assert.equal(config.apiKey, 'sample-key');
+    assert.equal(config.cacheTtlSeconds, 0);
+    assert.equal(config.host, '127.0.0.1');
+    assert.equal(config.kvRestApiToken, 'sample-token');
+    assert.equal(config.kvRestApiUrl, 'https://sample-cache.example');
+    assert.equal(config.port, 8088);
+    assert.equal(config.proxy?.url, 'http://sample-proxy.example:3128/');
+    assert.equal(config.requestTimeoutMs, 2500);
+    assert.equal(config.trustProxy, false);
+  });
+
+  it('should use the hosting platform port when no override is configured', () => {
+    process.env.PORT = '9000';
+    assert.equal(loadConfig().port, 9000);
+  });
+
+  it('should allow CLI flags to override prefixed environment settings', () => {
+    Object.assign(process.env, {
+      TORRGATE_API_KEY: 'environment-key',
+      TORRGATE_CACHE_TTL_SECONDS: '600',
+      TORRGATE_HOST: '0.0.0.0',
+      TORRGATE_PORT: '8088',
+      TORRGATE_PROXY: 'http://environment-proxy.example:3128',
+      TORRGATE_REQUEST_TIMEOUT_MS: '2500',
+    });
+    const originalArgs = process.argv;
+    try {
+      process.argv = ['node', 'torrgate', '--apiKey', 'cli-key', '--cacheTtl', '0',
+        '--host', '127.0.0.1', '--port', '8080', '--proxy', 'http://cli-proxy.example:8080',
+        '--timeout', '1500'];
+      const config = loadConfig();
+      assert.equal(config.apiKey, 'cli-key');
+      assert.equal(config.cacheTtlSeconds, 0);
+      assert.equal(config.host, '127.0.0.1');
+      assert.equal(config.port, 8080);
+      assert.equal(config.proxy?.url, 'http://cli-proxy.example:8080/');
+      assert.equal(config.requestTimeoutMs, 1500);
+    } finally {
+      process.argv = originalArgs;
+    }
+  });
+
+  it('should load the upstream concurrency limit from the environment', () => {
+    process.env.TORRGATE_MAX_CONCURRENT_REQUESTS = '3';
+    assert.equal(loadConfig().maxConcurrentRequests, 3);
+  });
+
+  it('should let the concurrency CLI option override the environment', () => {
+    const originalArgs = process.argv;
+    process.env.TORRGATE_MAX_CONCURRENT_REQUESTS = '3';
+    try {
+      process.argv = ['node', 'torrgate', '--maxConcurrentRequests', '2'];
+      assert.equal(loadConfig().maxConcurrentRequests, 2);
+    } finally {
+      process.argv = originalArgs;
+    }
+  });
+
+  it('should reject invalid upstream concurrency limits at startup', () => {
+    for (const value of ['0', '-1', '1.5', 'NaN', 'Infinity', '9007199254740992']) {
+      process.env.TORRGATE_MAX_CONCURRENT_REQUESTS = value;
+      assert.throws(() => loadConfig(), /positive safe integer/);
+    }
+  });
+
+  it('should load and normalize TORRGATE_CORS_ORIGIN from the environment', () => {
+    process.env.TORRGATE_CORS_ORIGIN = ' https://client.example:443/ ';
+    assert.equal(loadConfig().corsOrigin, 'https://client.example');
+  });
+
+  it('should let the CORS CLI option override the environment', () => {
+    const originalArgs = process.argv;
+    process.env.TORRGATE_CORS_ORIGIN = 'https://environment.example';
+    try {
+      process.argv = ['node', 'torrgate', '--corsOrigin', 'https://cli.example:8443'];
+      assert.equal(loadConfig().corsOrigin, 'https://cli.example:8443');
+    } finally {
+      process.argv = originalArgs;
+    }
+  });
+
+  it('should reject invalid CORS configuration at startup', () => {
+    process.env.TORRGATE_CORS_ORIGIN = 'https://client.example/private';
+    assert.throws(() => loadConfig(), /single HTTP\(S\) origin/);
+  });
+
+  it('should load KV_REST_API_URL and KV_REST_API_TOKEN from environment', () => {
+    process.env.KV_REST_API_URL = 'https://example-kv.upstash.io';
+    process.env.KV_REST_API_TOKEN = 'sample-token';
+
+    const config = loadConfig();
+    assert.equal(config.kvRestApiUrl, 'https://example-kv.upstash.io');
+    assert.equal(config.kvRestApiToken, 'sample-token');
+  });
+
+  it('should fallback to UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN', () => {
+    process.env.UPSTASH_REDIS_REST_URL = 'https://example-upstash.upstash.io';
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'sample-upstash-token';
+
+    const config = loadConfig();
+    assert.equal(config.kvRestApiUrl, 'https://example-upstash.upstash.io');
+    assert.equal(config.kvRestApiToken, 'sample-upstash-token');
+  });
+
+  it('should parse HTTPS_PROXY with credentials and port', () => {
+    process.env.HTTPS_PROXY = 'http://proxyuser:proxypassword@127.0.0.1:8080';
+
+    const config = loadConfig();
+    assert.ok(config.proxy);
+    assert.equal(config.proxy.username, 'proxyuser');
+    assert.equal(config.proxy.password, 'proxypassword');
+    assert.equal(config.proxy.url, 'http://proxyuser:proxypassword@127.0.0.1:8080/');
+  });
+
+  it('should parse HTTP_PROXY when HTTPS_PROXY is not set', () => {
+    process.env.HTTP_PROXY = 'http://127.0.0.1:8888';
+
+    const config = loadConfig();
+    assert.ok(config.proxy);
+    assert.equal(config.proxy.url, 'http://127.0.0.1:8888/');
+    assert.equal(config.proxy.username, undefined);
+    assert.equal(config.proxy.password, undefined);
+  });
+
+  it('should parse lowercase http_proxy when uppercase is not set', () => {
+    process.env.http_proxy = 'http://10.0.0.1:3128';
+
+    const config = loadConfig();
+    assert.ok(config.proxy);
+    assert.equal(config.proxy.url, 'http://10.0.0.1:3128/');
+  });
+
+  it('should return undefined for empty or invalid proxy URLs in parseProxyUrl', () => {
+    assert.equal(parseProxyUrl(''), undefined);
+    assert.equal(parseProxyUrl('   '), undefined);
+    assert.equal(parseProxyUrl(':::invalid:::'), undefined);
+  });
+
+  it('should reject proxy schemes the proxy agents do not support', () => {
+    assert.equal(parseProxyUrl('socks5://127.0.0.1:1080'), undefined);
+    assert.ok(parseProxyUrl('https://proxy.example.org:8443'));
+  });
+
+  it('should handle bare host:port without scheme in parseProxyUrl', () => {
+    const parsed = parseProxyUrl('192.168.1.50:9050');
+    assert.ok(parsed);
+    assert.equal(parsed.url, 'http://192.168.1.50:9050/');
+  });
+});
+
+describe('parseCorsOrigin', () => {
+  it('should accept defaults, wildcard and normalized HTTP(S) origins', () => {
+    assert.equal(parseCorsOrigin(undefined), undefined);
+    assert.equal(parseCorsOrigin('  '), undefined);
+    assert.equal(parseCorsOrigin(' * '), '*');
+    assert.equal(parseCorsOrigin('https://CLIENT.example:443/'), 'https://client.example');
+    assert.equal(parseCorsOrigin('http://client.example:8080'), 'http://client.example:8080');
+  });
+
+  it('should reject credentials, paths, queries, fragments and unsupported schemes', () => {
+    for (const value of [
+      'https://sample-user:sample-password@client.example',
+      'https://client.example/path',
+      'https://client.example?query=sample',
+      'https://client.example#sample',
+      'file:///sample',
+      'null',
+      'https://first.example,https://second.example',
+    ]) {
+      assert.throws(() => parseCorsOrigin(value), /single HTTP\(S\) origin/);
+    }
+  });
+});
+
+describe('parseTrustProxy', () => {
+  it('should parse booleans, hop counts, and address lists', () => {
+    assert.equal(parseTrustProxy('true', false), true);
+    assert.equal(parseTrustProxy('false', true), false);
+    assert.equal(parseTrustProxy('2', false), 2);
+    assert.equal(parseTrustProxy('loopback, 10.0.0.0/8', false), 'loopback, 10.0.0.0/8');
+  });
+
+  it('should trust the platform proxy on Vercel only when nothing is configured', () => {
+    assert.equal(parseTrustProxy(undefined, true), true);
+    assert.equal(parseTrustProxy('', true), true);
+    assert.equal(parseTrustProxy(undefined, false), undefined);
+  });
+});
+
+describe('Unprotected tracker account warning', () => {
+  const sampleEnv = {
+    PORT: '8443',
+    TORRGATE_SAMPLE_TRACKER_COOKIE: 'bb_session=sample',
+    TORRGATE_SAMPLE_TRACKER_TIMEZONE: 'Europe/Moscow',
+    TORRGATE_TRACKER_PASSWORD: '',
+  };
+
+  it('should list only variables that configure an account', () => {
+    assert.deepEqual(findTrackerAccountVariables(sampleEnv), ['TORRGATE_SAMPLE_TRACKER_COOKIE']);
+  });
+
+  it('should detect global prefixed tracker credentials', () => {
+    assert.deepEqual(findTrackerAccountVariables({
+      TORRGATE_TRACKER_PASSWORD: 'sample-password',
+      TORRGATE_TRACKER_USERNAME: 'sample-user',
+    }), ['TORRGATE_TRACKER_PASSWORD', 'TORRGATE_TRACKER_USERNAME']);
+  });
+
+  it('should warn when accounts are configured without an API key', () => {
+    const warning = getUnprotectedAccountWarning({ apiKey: undefined }, sampleEnv);
+    assert.match(warning ?? '', /TORRGATE_API_KEY is not set.*TORRGATE_SAMPLE_TRACKER_COOKIE/);
+  });
+
+  it('should stay quiet with an API key or without accounts', () => {
+    assert.equal(getUnprotectedAccountWarning({ apiKey: 'sample-key' }, sampleEnv), undefined);
+    assert.equal(getUnprotectedAccountWarning({ apiKey: undefined }, { PORT: '8443' }), undefined);
+  });
+});

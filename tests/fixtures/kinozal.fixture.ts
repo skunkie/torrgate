@@ -1,0 +1,36 @@
+// SPDX-FileCopyrightText: 2026 TorrPlay
+//
+// SPDX-License-Identifier: MIT
+
+/**
+ * Synthetic Kinozal HTML search response containing invented test releases.
+ */
+export const testKinozalSearchHtml = `
+<!DOCTYPE html>
+<html>
+<body>
+<table class="t_peer">
+  <tbody>
+    <tr>
+      <td></td>
+      <td class="s bt"><img onclick="window.location='browse.php?c=13'" alt="Фильмы">Фильмы</td>
+      <td class="nam"><a href="/details.php?id=200001">Вымышленный Фильм / Fictional Film / 2024 / WEBRip 1080p</a></td>
+      <td class="s">4.50 ГБ</td>
+      <td class="sl">90</td>
+      <td class="sr">8</td>
+      <td class="s">15.08.2024 в 14:20</td>
+    </tr>
+    <tr>
+      <td></td>
+      <td class="s bt"><img onclick="window.location='browse.php?c=46'" alt="Сериалы">Сериалы</td>
+      <td class="nam"><a href="/details.php?id=200002">Тестовый Сериал / Sample Show / 2023 / HDTV</a></td>
+      <td class="s">1.20 ГБ</td>
+      <td class="sl">45</td>
+      <td class="sr">2</td>
+      <td class="s">вчера в 18:00</td>
+    </tr>
+  </tbody>
+</table>
+</body>
+</html>
+`;

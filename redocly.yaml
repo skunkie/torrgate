@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 TorrPlay
+#
+# SPDX-License-Identifier: MIT
+
+apis:
+  torrgate:
+    root: openapi.yaml
+extends:
+  - recommended-strict
+rules:
+  array-parameter-serialization: error
+  info-contact: error
+  operation-tag-defined: error

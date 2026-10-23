@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 TorrPlay
+#
+# SPDX-License-Identifier: MIT
+
+trackers:
+  - http://retracker.local/announce
+  - http://bt01.nnm-club.info:2710/announce
+  - http://bt02.nnm-club.info:2710/announce
+  - http://bt01.nnm-club.cc:2710/announce
+  - http://bt02.nnm-club.cc:2710/announce

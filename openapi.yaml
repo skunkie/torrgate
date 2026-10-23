@@ -1,0 +1,1423 @@
+# SPDX-FileCopyrightText: 2026 TorrPlay
+#
+# SPDX-License-Identifier: MIT
+
+openapi: 3.1.0
+info:
+  title: TorrGate API
+  version: 1.0.0
+  description: High-performance TypeScript API gateway and proxy for torrent trackers, adhering to the canonical Jackett REST v2.0 path space.
+  contact:
+    name: TorrGate
+    url: https://github.com/torrplay/torrgate
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: /api/v2.0/indexers
+    description: Canonical Jackett REST v2.0 endpoint space
+security:
+  - ApiKeyAuth: []
+  - ApiKeyQuery: []
+  - BearerAuth: []
+  - JackettApiKeyQuery: []
+  - PasskeyQuery: []
+  - SessionCookie: []
+  - {}
+tags:
+  - name: Downloads
+    description: .torrent file proxying and magnet URI extraction
+  - name: Indexers
+    description: Registered indexers, their availability, and category mappings
+  - name: Search
+    description: Jackett JSON search results and topic details
+  - name: Torznab
+    description: Torznab XML capabilities and search feeds
+paths:
+  /:
+    get:
+      summary: List registered indexers
+      description: Returns all supported torrent trackers.
+      operationId: listIndexers
+      tags: [Indexers]
+      responses:
+        "200":
+          description: List of registered indexer metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JackettIndexer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /check:
+    get:
+      summary: Check indexer availability
+      description: Tests connectivity across all registered indexers and returns their online status.
+      operationId: checkIndexers
+      tags: [Indexers]
+      responses:
+        "200":
+          description: Indexer availability status map
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderStatusMap"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /status:
+    get:
+      summary: Get indexer status
+      description: Alias for /check returning indexer availability status.
+      operationId: getIndexersStatus
+      tags: [Indexers]
+      responses:
+        "200":
+          description: Indexer availability status map
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderStatusMap"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /{indexer}/categories:
+    get:
+      summary: Get indexer category mappings
+      description: Returns tracker category mappings for inspection. Numeric tracker IDs are returned directly; named IDs use their mapped standard category ID, falling back to Other (8000) when unmapped. Use t=caps for the category IDs accepted by searches.
+      operationId: getCategories
+      tags: [Indexers]
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+            example: "rutor"
+      responses:
+        "200":
+          description: List of category mappings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryMapping"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /{indexer}/details/{id}:
+    get:
+      summary: Get topic details by ID
+      description: Retrieves detailed metadata for a specific topic/release by its tracker ID.
+      operationId: getTopicDetails
+      tags: [Search]
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+            example: "rutracker-ru"
+        - name: id
+          in: path
+          required: true
+          description: Topic or torrent ID
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+            example: "100001"
+      responses:
+        "200":
+          description: Topic details
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TopicDetails"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /{indexer}/download:
+    get:
+      summary: Download .torrent file
+      description: Proxies and streams .torrent file downloads from trackers requiring cookies or proxy access. Supply url or path; a non-empty url takes precedence.
+      operationId: downloadTorrent
+      tags: [Downloads]
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+            example: "rutracker-ru"
+        - name: url
+          in: query
+          required: false
+          description: Literal relative or absolute download URL for the .torrent file
+          schema:
+            type: string
+            example: "https://rutracker.org/forum/dl.php?t=100001"
+        - name: path
+          in: query
+          required: false
+          description: Legacy download URL or root-relative path, optionally base64url-encoded
+          schema:
+            type: string
+            example: "/forum/dl.php?t=100001"
+      responses:
+        "200":
+          description: Torrent file binary content
+          content:
+            application/x-bittorrent:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /{indexer}/magnet:
+    get:
+      summary: Extract magnet URI from .torrent file
+      description: Downloads the .torrent file through the indexer and builds a magnet URI from it, with the info hash computed from the file's info dictionary, the release name as the display name, and the file's announce URLs as trackers. Supply url or path; a non-empty url takes precedence.
+      operationId: getMagnetUri
+      tags: [Downloads]
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name or identifier
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+            example: "rutracker-ru"
+        - name: url
+          in: query
+          required: false
+          description: Literal relative or absolute download URL for the .torrent file
+          schema:
+            type: string
+            example: "https://rutracker.org/forum/dl.php?t=100001"
+        - name: path
+          in: query
+          required: false
+          description: Legacy download URL or root-relative path, optionally base64url-encoded
+          schema:
+            type: string
+            example: "/forum/dl.php?t=100001"
+      responses:
+        "200":
+          description: Magnet URI and info hash of the .torrent file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /{indexer}/results:
+    get:
+      summary: Search torrents across indexers
+      description: Searches configured indexers once and returns the search results envelope, ordered by publish date with per-indexer failures. Each indexer admits an unfiltered request or one containing at least one category ID advertised in its caps; otherwise it reports successful empty results with zero elapsed time. JSON all checks individual indexers directly. Unconfigured indexers return 404. Nullable IDs bind case-insensitively; keys whose first spelling is exactly lowercase tmdbid, tvdbid, or tvmazeid and the raw Category[] key are also parsed by the action, where invalid or blank integers fail with 500.
+      operationId: searchResults
+      tags: [Search]
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Tracker indexer name, identifier, or 'all'
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+            example: "all"
+        - name: Query
+          in: query
+          required: false
+          description: Search keywords, bound case-insensitively from the first value; blank values are absent. A trailing SxxEyy, Sxx or Eyy tag (two to four digits each, with an optional letter after the episode) is removed and searched as that season and episode, with leading zeros dropped from the episode. A remaining term of tt followed by one to eight digits, ignoring punctuation such as ! or a comma, is searched as an IMDb title id and takes precedence over imdbid.
+          schema:
+            type: string
+            example: "Example Release"
+        - name: imdbid
+          in: query
+          required: false
+          description: IMDb value searched alongside Query and preserved as supplied; whitespace-only values are absent
+          schema:
+            type: string
+            example: "tt0123456"
+        - name: DoubanID
+          in: query
+          required: false
+          description: Nullable integer ID passed to definitions as .Query.DoubanID; parameter names bind case-insensitively
+          schema:
+            type: integer
+            format: int32
+        - name: RageID
+          in: query
+          required: false
+          description: Nullable integer ID passed to definitions as .Query.TVRageID; parameter names bind case-insensitively
+          schema:
+            type: integer
+            format: int32
+        - name: TvdbId
+          in: query
+          required: false
+          description: Nullable integer ID passed to definitions as .Query.TVDBID; parameter names bind case-insensitively
+          schema:
+            type: integer
+            format: int32
+        - name: TmdbId
+          in: query
+          required: false
+          description: Nullable integer ID passed to definitions as .Query.TMDBID; parameter names bind case-insensitively
+          schema:
+            type: integer
+            format: int32
+        - name: TvMazeId
+          in: query
+          required: false
+          description: Nullable integer ID passed to definitions as .Query.TVMazeID; parameter names bind case-insensitively
+          schema:
+            type: integer
+            format: int32
+        - name: TraktID
+          in: query
+          required: false
+          description: Nullable integer ID passed to definitions as .Query.TraktID; parameter names bind case-insensitively
+          schema:
+            type: integer
+            format: int32
+        - name: Category
+          in: query
+          required: false
+          description: Advertised Torznab category ID, bound case-insensitively; repeat for multiple values. Raw tracker forum IDs are unsupported.
+          schema:
+            type: string
+        - name: Category[]
+          in: query
+          required: false
+          description: Advertised Torznab category IDs, including repeated and comma-separated values; this key overrides Category when its first URL spelling is exactly Category[]. Raw tracker forum IDs are unsupported.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+            example: ["2000", "5000,5040"]
+        - name: Tracker[]
+          in: query
+          required: false
+          description: Exact indexer IDs, repeated or comma-separated, on single or aggregate searches; the first spelling of this query key must be exactly Tracker[] and values are not trimmed
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+            example: ["rutor", "kinozal"]
+      responses:
+        "200":
+          description: Jackett search response envelope with per-indexer failures and results ordered by publish date, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JackettSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /{indexer}/results/torznab:
+    get:
+      summary: Get Torznab feed, capabilities, or indexer discovery (alias)
+      description: Alias for /{indexer}/results/torznab/api emitting Torznab XML (<caps> for t=caps, an indexer list for t=indexers on all, and RSS 2.0 with torznab:attr for search queries). Query parameter names other than the API key are matched case-insensitively.
+      operationId: getTorznabFeedAlias
+      tags: [Torznab]
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Configured tracker indexer name or identifier, or `all` for configured indexers; an unconfigured indexer returns 404 with Torznab error 201
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+            example: "rutor"
+        - name: t
+          in: query
+          required: false
+          description: Torznab request type (caps, indexers, search, tvsearch, movie, music, book), matched case-sensitively; any other value, or a search mode the indexer caps do not offer, returns error 201
+          schema:
+            type: string
+            default: "search"
+            enum: [book, caps, indexers, movie, music, search, tvsearch]
+        - name: extended
+          in: query
+          required: false
+          description: Coerced to a 32-bit integer like limit and offset, including on caps and indexers requests; passed to definitions as .Query.Extended, defaulting to the string 0
+          schema:
+            type: string
+            default: "0"
+        - name: cache
+          in: query
+          required: false
+          description: false bypasses response-cache reads and refreshes the stored response; boolean strings match case-insensitively with whitespace ignored, and other values keep caching enabled. A bypassed response uses Cache-Control no-store.
+          schema:
+            type: string
+            default: "true"
+        - name: configured
+          in: query
+          required: false
+          description: Filters t=indexers on all by configuration state; true and false match case-insensitively, and other values leave the list unfiltered. Configuration requires values for the variables the definition's login templates emit or a usable session cookie; definitions without login are configured. A t=indexers request for a configured single indexer returns error 203.
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: false
+          description: Search term, which definitions see as .Query.Q; .Keywords also includes the requested year and episode tag
+          schema:
+            type: string
+        - name: imdbid
+          in: query
+          required: false
+          description: Nonzero IMDb title id with an optional lowercase tt prefix and one to eight digits, searched alongside any q. Leading and trailing spaces are invalid; a trailing LF is accepted as in Jackett. A movie search needs imdbid in the indexer movie-search caps (error 201 otherwise); a TV search needs a definition that sets allowtvsearchimdb, and returns error 203 otherwise or on all.
+          schema:
+            type: string
+            pattern: '^(?:tt)?(?=[0-9]*[1-9])[0-9]{1,8}\n?(?![\s\S])'
+            example: "tt0123456"
+        - name: season
+          in: query
+          required: false
+          description: Season number, added to the keywords as Sxx for every search type; 0 adds no tag. A four-digit season with an MM/dd ep adds the air date as yyyy.MM.dd instead. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+            example: 1
+        - name: ep
+          in: query
+          required: false
+          description: Episode, added with season as SxxEyy from the digits it contains (01A searches episode 1), or a daily-show air date in MM/dd form
+          schema:
+            type: string
+            example: "2"
+        - name: year
+          in: query
+          required: false
+          description: Release year, added to the keywords after the search term and passed to definitions as .Query.Year, including 0; results are not filtered by year. Indexer caps list year for the modes whose definitions accept it. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+            example: 2024
+        - name: rid
+          in: query
+          required: false
+          description: TVRage id, passed to definitions as .Query.TVRageID; with rid in the indexer tv-search caps, an otherwise unsupported search mode is still answered. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: tvdbid
+          in: query
+          required: false
+          description: TVDB id, passed to definitions as .Query.TVDBID; with tvdbid in the indexer tv-search caps, an otherwise unsupported search mode is still answered. A TV search returns error 203 when the indexer has no TV search. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: tvmazeid
+          in: query
+          required: false
+          description: TVmaze id, passed to definitions as .Query.TVMazeID. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: tmdbid
+          in: query
+          required: false
+          description: TMDB id, passed to definitions as .Query.TMDBID. A movie or TV search returns error 203 unless tmdbid is in that mode's indexer caps. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: traktid
+          in: query
+          required: false
+          description: Trakt id, passed to definitions as .Query.TraktID. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: doubanid
+          in: query
+          required: false
+          description: Douban id, passed to definitions as .Query.DoubanID. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: album
+          in: query
+          required: false
+          description: Music album, passed to definitions as .Query.Album; a blank value is ignored.
+          schema:
+            type: string
+        - name: artist
+          in: query
+          required: false
+          description: Music artist, passed to definitions as .Query.Artist; a blank value is ignored.
+          schema:
+            type: string
+        - name: label
+          in: query
+          required: false
+          description: Music label, passed to definitions as .Query.Label; a blank value is ignored.
+          schema:
+            type: string
+        - name: track
+          in: query
+          required: false
+          description: Music track, passed to definitions as .Query.Track; a blank value is ignored.
+          schema:
+            type: string
+        - name: genre
+          in: query
+          required: false
+          description: Genre, passed to definitions as .Query.Genre; a blank value is ignored.
+          schema:
+            type: string
+        - name: title
+          in: query
+          required: false
+          description: Book title, passed to definitions as .Query.Title; a blank value is ignored.
+          schema:
+            type: string
+        - name: author
+          in: query
+          required: false
+          description: Book author, passed to definitions as .Query.Author; a blank value is ignored.
+          schema:
+            type: string
+        - name: publisher
+          in: query
+          required: false
+          description: Book publisher. As in Jackett, it is passed to definitions as .Query.Author, replacing author; a blank value is ignored.
+          schema:
+            type: string
+        - name: cat
+          in: query
+          required: false
+          description: Torznab category IDs from caps, comma-separated. A parent (5000) matches its subcategories. With no categories the search is unfiltered; otherwise each indexer requires at least one advertised requested ID or returns an empty feed. Torznab all first checks combined caps, which exclude tracker-specific IDs. Single indexers accept their advertised tracker-specific IDs, including 100000 + ID for described numeric tracker categories. Raw tracker forum IDs are unsupported; mixed requests retain their original IDs. Only the first cat value is read; order and duplicates are preserved, blank entries are skipped, and any other entry that is not an integer returns error 201. A movie search with imdbid and no categories searches Movies (2000).
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: As in Jackett, indexers answer from their first page only, so a value above 0 returns an empty feed. Coerced from digits and numeric separators (-5 reads as 5 and 1.5 as 15); a value beyond 32 bits returns error 201
+          schema:
+            type: string
+            default: "0"
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return; absent or 0 returns every result. Coerced from digits and numeric separators (-5 reads as 5 and 1.5 as 15); a value beyond 32 bits returns error 201
+          schema:
+            type: string
+            default: "0"
+      responses:
+        "200":
+          description: Torznab RSS search feed, caps document, or aggregate indexer discovery list; caps and discovery use Cache-Control no-store
+          content:
+            application/xml:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/TorznabError"
+        "401":
+          $ref: "#/components/responses/TorznabError"
+        "404":
+          $ref: "#/components/responses/TorznabError"
+        "429":
+          $ref: "#/components/responses/TorznabError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          $ref: "#/components/responses/TorznabError"
+
+  /{indexer}/results/torznab/api:
+    get:
+      summary: Get Torznab feed, capabilities, or indexer discovery
+      description: Emits Torznab XML (<caps> for t=caps, an indexer list for t=indexers on all, and RSS 2.0 with torznab:attr for search queries). Query parameter names other than the API key are matched case-insensitively.
+      operationId: getTorznabFeed
+      tags: [Torznab]
+      parameters:
+        - name: indexer
+          in: path
+          required: true
+          description: Configured tracker indexer name or identifier, or `all` for configured indexers; an unconfigured indexer returns 404 with Torznab error 201
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+            example: "rutor"
+        - name: t
+          in: query
+          required: false
+          description: Torznab request type (caps, indexers, search, tvsearch, movie, music, book), matched case-sensitively; any other value, or a search mode the indexer caps do not offer, returns error 201
+          schema:
+            type: string
+            default: "search"
+            enum: [book, caps, indexers, movie, music, search, tvsearch]
+        - name: extended
+          in: query
+          required: false
+          description: Coerced to a 32-bit integer like limit and offset, including on caps and indexers requests; passed to definitions as .Query.Extended, defaulting to the string 0
+          schema:
+            type: string
+            default: "0"
+        - name: cache
+          in: query
+          required: false
+          description: false bypasses response-cache reads and refreshes the stored response; boolean strings match case-insensitively with whitespace ignored, and other values keep caching enabled. A bypassed response uses Cache-Control no-store.
+          schema:
+            type: string
+            default: "true"
+        - name: configured
+          in: query
+          required: false
+          description: Filters t=indexers on all by configuration state; true and false match case-insensitively, and other values leave the list unfiltered. Configuration requires values for the variables the definition's login templates emit or a usable session cookie; definitions without login are configured. A t=indexers request for a configured single indexer returns error 203.
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: false
+          description: Search term, which definitions see as .Query.Q; .Keywords also includes the requested year and episode tag
+          schema:
+            type: string
+        - name: imdbid
+          in: query
+          required: false
+          description: Nonzero IMDb title id with an optional lowercase tt prefix and one to eight digits, searched alongside any q. Leading and trailing spaces are invalid; a trailing LF is accepted as in Jackett. A movie search needs imdbid in the indexer movie-search caps (error 201 otherwise); a TV search needs a definition that sets allowtvsearchimdb, and returns error 203 otherwise or on all.
+          schema:
+            type: string
+            pattern: '^(?:tt)?(?=[0-9]*[1-9])[0-9]{1,8}\n?(?![\s\S])'
+            example: "tt0123456"
+        - name: season
+          in: query
+          required: false
+          description: Season number, added to the keywords as Sxx for every search type; 0 adds no tag. A four-digit season with an MM/dd ep adds the air date as yyyy.MM.dd instead. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+            example: 1
+        - name: ep
+          in: query
+          required: false
+          description: Episode, added with season as SxxEyy from the digits it contains (01A searches episode 1), or a daily-show air date in MM/dd form
+          schema:
+            type: string
+            example: "2"
+        - name: year
+          in: query
+          required: false
+          description: Release year, added to the keywords after the search term and passed to definitions as .Query.Year, including 0; results are not filtered by year. Indexer caps list year for the modes whose definitions accept it. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+            example: 2024
+        - name: rid
+          in: query
+          required: false
+          description: TVRage id, passed to definitions as .Query.TVRageID; with rid in the indexer tv-search caps, an otherwise unsupported search mode is still answered. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: tvdbid
+          in: query
+          required: false
+          description: TVDB id, passed to definitions as .Query.TVDBID; with tvdbid in the indexer tv-search caps, an otherwise unsupported search mode is still answered. A TV search returns error 203 when the indexer has no TV search. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: tvmazeid
+          in: query
+          required: false
+          description: TVmaze id, passed to definitions as .Query.TVMazeID. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: tmdbid
+          in: query
+          required: false
+          description: TMDB id, passed to definitions as .Query.TMDBID. A movie or TV search returns error 203 unless tmdbid is in that mode's indexer caps. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: traktid
+          in: query
+          required: false
+          description: Trakt id, passed to definitions as .Query.TraktID. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: doubanid
+          in: query
+          required: false
+          description: Douban id, passed to definitions as .Query.DoubanID. A value that is not an integer returns error 201.
+          schema:
+            type: integer
+            format: int32
+        - name: album
+          in: query
+          required: false
+          description: Music album, passed to definitions as .Query.Album; a blank value is ignored.
+          schema:
+            type: string
+        - name: artist
+          in: query
+          required: false
+          description: Music artist, passed to definitions as .Query.Artist; a blank value is ignored.
+          schema:
+            type: string
+        - name: label
+          in: query
+          required: false
+          description: Music label, passed to definitions as .Query.Label; a blank value is ignored.
+          schema:
+            type: string
+        - name: track
+          in: query
+          required: false
+          description: Music track, passed to definitions as .Query.Track; a blank value is ignored.
+          schema:
+            type: string
+        - name: genre
+          in: query
+          required: false
+          description: Genre, passed to definitions as .Query.Genre; a blank value is ignored.
+          schema:
+            type: string
+        - name: title
+          in: query
+          required: false
+          description: Book title, passed to definitions as .Query.Title; a blank value is ignored.
+          schema:
+            type: string
+        - name: author
+          in: query
+          required: false
+          description: Book author, passed to definitions as .Query.Author; a blank value is ignored.
+          schema:
+            type: string
+        - name: publisher
+          in: query
+          required: false
+          description: Book publisher. As in Jackett, it is passed to definitions as .Query.Author, replacing author; a blank value is ignored.
+          schema:
+            type: string
+        - name: cat
+          in: query
+          required: false
+          description: Torznab category IDs from caps, comma-separated. A parent (5000) matches its subcategories. With no categories the search is unfiltered; otherwise each indexer requires at least one advertised requested ID or returns an empty feed. Torznab all first checks combined caps, which exclude tracker-specific IDs. Single indexers accept their advertised tracker-specific IDs, including 100000 + ID for described numeric tracker categories. Raw tracker forum IDs are unsupported; mixed requests retain their original IDs. Only the first cat value is read; order and duplicates are preserved, blank entries are skipped, and any other entry that is not an integer returns error 201. A movie search with imdbid and no categories searches Movies (2000).
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: As in Jackett, indexers answer from their first page only, so a value above 0 returns an empty feed. Coerced from digits and numeric separators (-5 reads as 5 and 1.5 as 15); a value beyond 32 bits returns error 201
+          schema:
+            type: string
+            default: "0"
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return; absent or 0 returns every result. Coerced from digits and numeric separators (-5 reads as 5 and 1.5 as 15); a value beyond 32 bits returns error 201
+          schema:
+            type: string
+            default: "0"
+      responses:
+        "200":
+          description: Torznab RSS search feed, caps document, or aggregate indexer discovery list; caps and discovery use Cache-Control no-store
+          content:
+            application/xml:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/TorznabError"
+        "401":
+          $ref: "#/components/responses/TorznabError"
+        "404":
+          $ref: "#/components/responses/TorznabError"
+        "429":
+          $ref: "#/components/responses/TorznabError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          $ref: "#/components/responses/TorznabError"
+
+components:
+  responses:
+    BadGateway:
+      description: Bad gateway error when upstream tracker fails
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Target download host is not an allowed mirror of the indexer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalServerError:
+      description: Unexpected internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    TooManyRequests:
+      description: Too many failed API key attempts from this client; retry after the one-minute window
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    TorznabError:
+      description: "Torznab error document: code 100 for a missing or wrong API key, 201 for an invalid parameter, unknown or unconfigured indexer, or search the indexer caps cannot handle, 203 for unsupported TV IMDb, movie/TV TMDB, or TVDB searches, or t=indexers on a configured single indexer, 500 while the client is blocked after repeated wrong keys, and 900 when a single indexer could not be searched (all leaves failed indexers out instead)"
+      content:
+        application/xml:
+          schema:
+            type: string
+          example: |-
+            <?xml version="1.0" encoding="UTF-8"?>
+            <error code="201" description="Indexer &apos;unknown&apos; not found" />
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    CategoryMapping:
+      type: object
+      description: Tracker category mapping for inspection; search category IDs are advertised in t=caps
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: number
+          description: Numeric tracker ID, or the mapped standard category ID for a named tracker category
+          example: 1
+        name:
+          type: string
+          example: "Movies"
+
+    ErrorResponse:
+      type: object
+      description: Standard API error structure
+      required:
+        - error
+        - message
+        - statusCode
+        - success
+      properties:
+        error:
+          type: string
+          example: "NotFound"
+        message:
+          type: string
+          example: "Indexer 'unknown' not found"
+        statusCode:
+          type: integer
+          example: 404
+        success:
+          type: boolean
+          const: false
+          example: false
+
+    JackettIndexer:
+      type: object
+      description: Jackett indexer model
+      required:
+        - caps
+        - configured
+        - id
+        - links
+        - name
+        - site_link
+        - type
+      properties:
+        caps:
+          type: object
+          description: Capabilities configuration
+          example:
+            CategoryMapping:
+              - Cat: "Movies"
+                Desc: "Movies"
+                ID: 1
+            Modes:
+              movie-search: ["q"]
+              search: ["q"]
+              tv-search: ["q"]
+        configured:
+          type: boolean
+          description: Whether login is unnecessary, its emitted template variables have values, or a usable session cookie is available
+          example: true
+        id:
+          type: string
+          example: "rutor"
+        links:
+          type: array
+          items:
+            type: string
+          example: ["https://rutor.info", "https://rutor.is"]
+        name:
+          type: string
+          example: "RuTor"
+        site_link:
+          type: string
+          example: "https://rutor.info"
+        type:
+          type: string
+          enum: [private, public, semi-private]
+          example: "public"
+
+    JackettIndexerStatus:
+      type: object
+      description: Status of an individual indexer in a search response
+      required:
+        - ElapsedTime
+        - Error
+        - ID
+        - Name
+        - Results
+        - Status
+      properties:
+        ElapsedTime:
+          type: integer
+          description: Search duration in milliseconds; zero when the indexer fails
+          example: 45
+        Error:
+          type: [string, "null"]
+          example: null
+        ID:
+          type: string
+          example: "rutor"
+        Name:
+          type: string
+          example: "RuTor"
+        Results:
+          type: integer
+          example: 1
+        Status:
+          type: integer
+          description: "Indexer status (Jackett enum: 0 = Unknown, 1 = Error, 2 = OK)"
+          enum: [0, 1, 2]
+          example: 2
+
+    JackettResultItem:
+      type: object
+      description: Individual torrent result item
+      required:
+        - Album
+        - Artist
+        - Author
+        - BlackholeLink
+        - BookTitle
+        - Category
+        - CategoryDesc
+        - Description
+        - Details
+        - DoubanId
+        - DownloadVolumeFactor
+        - Files
+        - FirstSeen
+        - Gain
+        - Genres
+        - Grabs
+        - Guid
+        - Imdb
+        - InfoHash
+        - Label
+        - Languages
+        - Link
+        - MagnetUri
+        - MinimumRatio
+        - MinimumSeedTime
+        - Peers
+        - Poster
+        - PublishDate
+        - Publisher
+        - RageID
+        - Seeders
+        - Size
+        - Subs
+        - TMDb
+        - TVDBId
+        - TVMazeId
+        - Title
+        - Track
+        - Tracker
+        - TrackerId
+        - TrackerType
+        - TraktId
+        - UploadVolumeFactor
+        - Year
+      properties:
+        Album:
+          type:
+            - string
+            - "null"
+        Artist:
+          type:
+            - string
+            - "null"
+        Author:
+          type:
+            - string
+            - "null"
+        BlackholeLink:
+          type:
+            - string
+            - "null"
+          example: null
+        BookTitle:
+          type:
+            - string
+            - "null"
+        Category:
+          type: array
+          items:
+            type: integer
+          example:
+            - 2000
+            - 100001
+        CategoryDesc:
+          type: string
+          example: Movies
+        Description:
+          type:
+            - string
+            - "null"
+          description: Release description; an explicitly empty value stays empty, while an absent value is null
+          example: null
+        Details:
+          type: [string, "null"]
+          example: https://rutor.info/torrent/300001
+        DoubanId:
+          type:
+            - integer
+            - "null"
+        DownloadVolumeFactor:
+          type:
+            - number
+            - "null"
+          example: 0
+        Files:
+          type:
+            - integer
+            - "null"
+          example: null
+        FirstSeen:
+          description: Default DateTime value for interactive search results
+          type: string
+          example: 0001-01-01T00:00:00
+        Gain:
+          type:
+            - number
+            - "null"
+          description: Seeders times size in gigabytes without rounding; null when the release has no size or seeders
+          example: 697.67578125
+        Genres:
+          type:
+            - array
+            - "null"
+          items:
+            type: string
+        Grabs:
+          type:
+            - integer
+            - "null"
+          example: 5
+        Guid:
+          type: string
+          description: Release GUID as Jackett assigns it, also emitted as the Torznab item guid; the tracker download link, else the magnet URI, else the details URL
+          example: https://d.rutor.info/download/300001
+        Imdb:
+          type:
+            - integer
+            - "null"
+        InfoHash:
+          type:
+            - string
+            - "null"
+          example: 0123456789ABCDEF0123456789ABCDEF01234567
+          description: Supplied nonblank info hash, otherwise the magnet xt hash, preserving its case.
+        Label:
+          type:
+            - string
+            - "null"
+        Languages:
+          type: array
+          items:
+            type: string
+          description: Empty in Jackett manual search results.
+          maxItems: 0
+        Link:
+          type:
+            - string
+            - "null"
+          description: Absolute TorrGate download URL with jackett_apikey when an API key is in use; null when the release has no download link.
+          example: https://torrgate.example.test/api/v2.0/indexers/rutor/download?url=https%3A%2F%2Fd.rutor.info%2Fdownload%2F300001&jackett_apikey=sample-api-key
+        MagnetUri:
+          type:
+            - string
+            - "null"
+          example: magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567
+        MinimumRatio:
+          type:
+            - number
+            - "null"
+          example: 1
+        MinimumSeedTime:
+          description: Minimum seeding time in seconds; null when not declared
+          type:
+            - integer
+            - "null"
+          example: 172800
+        Peers:
+          type: [integer, "null"]
+          example: 15
+          description: Leechers, as exposed by Jackett manual search; null when seeders are absent.
+        Poster:
+          type:
+            - string
+            - "null"
+          format: uri
+          example: https://tracker.example.test/posters/sample-release.jpg
+        PublishDate:
+          type: string
+          example: 2026-08-15T12:00:00.000Z
+        Publisher:
+          type:
+            - string
+            - "null"
+        RageID:
+          type:
+            - integer
+            - "null"
+        Seeders:
+          type: [integer, "null"]
+          example: 320
+        Size:
+          type:
+            - integer
+            - "null"
+          description: Size in bytes; null when the indexer's definition gives the release no size
+          example: 2341011456
+        Subs:
+          type: array
+          items:
+            type: string
+          description: Empty in Jackett manual search results.
+          maxItems: 0
+        TMDb:
+          type:
+            - integer
+            - "null"
+        TVDBId:
+          type:
+            - integer
+            - "null"
+        TVMazeId:
+          type:
+            - integer
+            - "null"
+        Title:
+          type: string
+          example: Example Release (2026) BDRip
+        Track:
+          type:
+            - string
+            - "null"
+        Tracker:
+          type: string
+          example: RuTor
+        TrackerId:
+          type: string
+          example: rutor
+        TrackerType:
+          type: string
+          enum:
+            - private
+            - public
+            - semi-private
+          example: public
+        TraktId:
+          type:
+            - integer
+            - "null"
+        UploadVolumeFactor:
+          type:
+            - number
+            - "null"
+          example: 1
+        Year:
+          type:
+            - integer
+            - "null"
+
+    JackettSearchResponse:
+      type: object
+      description: Jackett search response envelope
+      required:
+        - Indexers
+        - Results
+      properties:
+        Indexers:
+          type: array
+          items:
+            $ref: "#/components/schemas/JackettIndexerStatus"
+        Results:
+          type: array
+          items:
+            $ref: "#/components/schemas/JackettResultItem"
+
+    MagnetResponse:
+      type: object
+      description: Magnet URI built from a tracker's .torrent file
+      required:
+        - InfoHash
+        - MagnetUri
+      properties:
+        InfoHash:
+          type: string
+          description: Uppercase hex SHA-1 v1 info hash
+          example: "0123456789ABCDEF0123456789ABCDEF01234567"
+        MagnetUri:
+          type: string
+          example: "magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567&dn=Example%20Release&tr=http%3A%2F%2Ftracker.example.org%2Fannounce"
+
+    ProviderStatusMap:
+      type: object
+      description: Connectivity status for providers keyed by provider name
+      additionalProperties:
+        type: boolean
+      example:
+        Kinozal: true
+        NoNaMe Club: true
+        RuTor: true
+        RuTracker.RU: true
+
+    TopicDetails:
+      type: object
+      description: Detailed metadata for a torrent topic
+      required:
+        - actors
+        - audioTranslation
+        - category
+        - description
+        - director
+        - duration
+        - id
+        - imdbUrl
+        - infoHash
+        - kinopoiskUrl
+        - magnetUri
+        - name
+        - posterUrl
+        - releaseCountry
+        - torrentUrl
+        - url
+        - year
+      properties:
+        actors:
+          type: array
+          items:
+            type: string
+          example: ["Актер Первый", "Актер Второй"]
+        audioTranslation:
+          type: string
+          example: "Профессиональный"
+        category:
+          type: string
+          example: "Фильмы"
+        description:
+          type: string
+          example: "Вымышленное описание для примера."
+        director:
+          type: string
+          example: "Тестовый Режиссер"
+        duration:
+          type: string
+          example: "01:45:00"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/TorrentFile"
+        id:
+          type: string
+          example: "100001"
+        imdbId:
+          type: string
+          example: "1234567"
+        imdbUrl:
+          type: string
+          example: "https://www.imdb.com/title/tt1234567/"
+        infoHash:
+          type: string
+          description: Uppercase info hash from the topic's magnet link, in that link's hex or base32 encoding, or an empty string when the topic has none
+          example: "0123456789ABCDEF0123456789ABCDEF01234567"
+        kinopoiskId:
+          type: string
+          example: "7654321"
+        kinopoiskUrl:
+          type: string
+          example: "https://www.kinopoisk.ru/film/7654321/"
+        magnetUri:
+          type: string
+          example: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+        name:
+          type: string
+          example: "Пример Фильма / Example Movie (2026) BDRip 1080p"
+        posterUrl:
+          type: string
+          example: "https://example.com/poster.jpg"
+        releaseCountry:
+          type: string
+          example: "Примерная Страна"
+        torrentUrl:
+          type: string
+          example: "https://rutracker.org/forum/dl.php?t=100001"
+        url:
+          type: string
+          example: "https://rutracker.org/forum/viewtopic.php?t=100001"
+        year:
+          type: string
+          example: "2026"
+
+    TorrentFile:
+      type: object
+      description: Individual file within a torrent release
+      required:
+        - name
+        - size
+      properties:
+        name:
+          type: string
+          example: "sample.movie.2026.1080p.mkv"
+        size:
+          type: string
+          example: "1.45 GB"
+        sizeBytes:
+          type: integer
+          example: 1556925645
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Optional API key passed via HTTP header
+    ApiKeyQuery:
+      type: apiKey
+      in: query
+      name: apikey
+      description: Optional API key passed via query parameter
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Optional API key passed as a Bearer token
+    JackettApiKeyQuery:
+      type: apiKey
+      in: query
+      name: jackett_apikey
+      description: Optional API key passed via query parameter, as in the download links that search results and feeds contain
+    PasskeyQuery:
+      type: apiKey
+      in: query
+      name: passkey
+      description: Optional API key passed via query parameter, an alternative name Jackett also accepts
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: torrgate_session
+      description: Optional signed session cookie set by the web client sign-in form
