@@ -41,7 +41,7 @@ TorrGate integrates tracker scrapers for RuTracker, Kinozal, RuTor, NoNameClub, 
 
 ### Prerequisites
 
-- Node.js 22+ (ESM support)
+- Node.js 22.18.0 or later
 - npm
 
 ### Installation
@@ -410,3 +410,5 @@ Use `minor`, `major`, or an explicit semantic version in place of `patch` as nee
 TorrGate-authored TypeScript code is licensed under the [MIT License](LICENSE). Imported YAML files in `definitions/` are verbatim copies from Jackett revision `ffd509c8c`; the local `rutracker.yml` adapts its C# RuTracker.org provider. These Jackett-derived definitions retain the [GPL-2.0-only license](LICENSES/GPL-2.0-only.txt). Imported files receive copyright and license metadata through [REUSE.toml](REUSE.toml) so their contents remain unchanged.
 
 Copyright (c) 2026 TorrPlay
+
+Run `npm run lint:spelling` to check American English in documentation, source comments, and user-facing web text. The spelling check excludes code examples and fixture values; add project names and technical terms to `cspell.config.mjs` when needed.
